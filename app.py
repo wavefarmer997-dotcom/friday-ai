@@ -61,7 +61,6 @@ import re
 @app.get("/api/tts")
 async def get_female_speech(text: str):
     try:
-        from gtts import gTTS
         # ลบ Thinking Box, HTML Tags, Markdown Images, Links, Code Blocks
         clean_text = re.sub(r'<details[\s\S]*?</details>', '', text, flags=re.IGNORECASE)
         clean_text = re.sub(r'<div[\s\S]*?</div>', '', clean_text, flags=re.IGNORECASE)
@@ -85,6 +84,21 @@ async def get_female_speech(text: str):
         if not clean_text:
             return Response(status_code=400)
         
+        # 1. ใช้เสียงผู้หญิงไทยระดับ AI Neural (th-TH-PremwadeeNeural) นุ่มนวล สมจริงที่สุด
+        try:
+            import edge_tts
+            communicate = edge_tts.Communicate(clean_text, "th-TH-PremwadeeNeural")
+            audio_data = bytearray()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data.extend(chunk["data"])
+            if len(audio_data) > 500:
+                return Response(content=bytes(audio_data), media_type="audio/mpeg")
+        except Exception as edge_err:
+            print(f"[EdgeTTS] Fallback: {edge_err}")
+
+        # 2. Fallback สำรองด้วย gTTS
+        from gtts import gTTS
         fp = io.BytesIO()
         tts = gTTS(text=clean_text, lang='th')
         tts.write_to_fp(fp)
