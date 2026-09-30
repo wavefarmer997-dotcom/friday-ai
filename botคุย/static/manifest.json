@@ -1,0 +1,50 @@
+{
+  "name": "Friday - ผู้ช่วย AI ส่วนตัว",
+  "short_name": "Friday AI",
+  "description": "ผู้ช่วย AI ตอบโต้แบบเรียลไทม์ โทรคุยด้วยเสียง วาดรูป และระบบความจำระยะยาว",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0f1d",
+  "theme_color": "#0f172a",
+  "lang": "th",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "โทรคุยด้วยเสียง",
+      "short_name": "Voice Call",
+      "description": "โทรคุยสองทางกับ Friday",
+      "url": "/?action=voice_call",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "สตูดิโอสร้างภาพ",
+      "short_name": "Image Studio",
+      "description": "สั่งวาดรูป AI ทันที",
+      "url": "/?action=image_studio",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
