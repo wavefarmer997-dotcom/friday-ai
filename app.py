@@ -21,7 +21,19 @@ app = FastAPI(title="Friday - Real-time AI Assistant with Memory")
 memory_engine = MemoryEngine()
 ai_service = AIService(memory_engine)
 
+# ตรวจหาตำแหน่งโฟลเดอร์ static อัตโนมัติ (รองรับทั้ง root และ subfolder)
+possible_static_dirs = [
+    os.path.join(os.path.dirname(__file__), "static"),
+    os.path.join(os.path.dirname(__file__), "botคุย", "static"),
+    os.path.join(os.getcwd(), "static"),
+    os.path.join(os.getcwd(), "botคุย", "static"),
+]
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+for p in possible_static_dirs:
+    if os.path.exists(os.path.join(p, "index.html")):
+        STATIC_DIR = p
+        break
+
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(os.path.join(STATIC_DIR, "css"), exist_ok=True)
 os.makedirs(os.path.join(STATIC_DIR, "js"), exist_ok=True)
@@ -31,10 +43,15 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/")
 async def serve_index():
-    index_file = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {"message": "Friday server is running. UI is initializing..."}
+    for p in possible_static_dirs:
+        index_file = os.path.join(p, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+    return {
+        "message": "Friday server is running. UI is initializing...",
+        "debug_cwd": os.getcwd(),
+        "debug_dirs": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else []
+    }
 
 # ==================== Natural Female Voice TTS API ====================
 from fastapi.responses import Response
