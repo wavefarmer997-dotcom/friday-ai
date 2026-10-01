@@ -208,7 +208,7 @@ async def get_settings():
         "api_provider": memory_engine.get_setting("api_provider", "gemini"),
         "has_api_key": bool(raw_key.strip()),
         "masked_api_key": masked_key,
-        "model_name": memory_engine.get_setting("model_name", "gemini-2.5-flash"),
+        "model_name": memory_engine.get_setting("model_name", "gemini-3.8-flash"),
         "openai_base_url": memory_engine.get_setting("openai_base_url", "https://api.openai.com/v1"),
         "temperature": memory_engine.get_setting("temperature", "0.7"),
         "custom_persona": memory_engine.get_setting("custom_persona", ""),

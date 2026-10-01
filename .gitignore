@@ -1,0 +1,48 @@
+# ============================================================
+# .gitignore สำหรับ Friday AI Chatbot
+# ============================================================
+
+# ----- ข้อมูลส่วนตัว / ความลับ (ห้ามอัพโหลดเด็ดขาด!) -----
+.env
+.env.local
+.env.production
+*.env
+
+# ----- ฐานข้อมูล (มีข้อมูลส่วนตัวของผู้ใช้) -----
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ----- รูปภาพที่ AI สร้าง (ไฟล์ชั่วคราว ใหญ่เกิน) -----
+static/generated_images/
+
+# ----- Python cache / build -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ----- Virtual Environment -----
+venv/
+env/
+.venv/
+.env/
+
+# ----- OS / Editor files -----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.log
+
+# ----- ไฟล์ทดสอบ / dev -----
+*.bak
+*.tmp

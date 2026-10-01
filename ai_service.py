@@ -366,7 +366,9 @@ class AIService:
 
     async def _stream_gemini(self, message: str, api_key: str, session_id: str, extra_context: str = "") -> AsyncGenerator[str, None]:
         """เรียกใช้งาน Gemini API แบบ Streaming ผ่าน HTTP Server-Sent Events (รองรับ Context สูงสุด 1,000,000 Tokens)"""
-        model = self.memory.get_setting("model_name", "gemini-2.5-flash")
+        model = self.memory.get_setting("model_name", "gemini-3.8-flash")
+        if not model:
+            model = "gemini-3.8-flash"
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={api_key}"
         
         system_instruction = self.build_system_prompt(extra_context=extra_context)
@@ -395,31 +397,46 @@ class AIService:
             }
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=90.0) as client:
-                async with client.stream("POST", url, json=payload, headers={"Content-Type": "application/json"}) as response:
-                    if response.status_code != 200:
-                        err_text = await response.aread()
-                        yield f"⚠️ เกิดข้อผิดพลาดจาก Gemini API (รหัส {response.status_code}): {err_text.decode('utf-8', errors='ignore')}"
-                        return
-                    
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            data_str = line[6:].strip()
-                            if data_str:
-                                try:
-                                    data = json.loads(data_str)
-                                    candidates = data.get("candidates", [])
-                                    if candidates:
-                                        parts = candidates[0].get("content", {}).get("parts", [])
-                                        for part in parts:
-                                            text_chunk = part.get("text", "")
-                                            if text_chunk:
-                                                yield text_chunk
-                                except json.JSONDecodeError:
-                                    continue
-        except Exception as e:
-            yield f"⚠️ การเชื่อมต่อขัดข้อง: {str(e)}"
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=90.0) as client:
+                    async with client.stream("POST", url, json=payload, headers={"Content-Type": "application/json"}) as response:
+                        if response.status_code == 503 or response.status_code == 429:
+                            if attempt < max_retries:
+                                await asyncio.sleep(1.5 * (attempt + 1))
+                                continue
+                            else:
+                                err_text = await response.aread()
+                                yield f"⚠️ เซิร์ฟเวอร์ Google Gemini กำลังมีผู้ใช้งานหนาแน่นชั่วคราว (รหัส 503): กรุณาลองส่งข้อความอีกครั้งในอีกสักครู่นะคะ"
+                                return
+                        elif response.status_code != 200:
+                            err_text = await response.aread()
+                            yield f"⚠️ เกิดข้อผิดพลาดจาก Gemini API (รหัส {response.status_code}): {err_text.decode('utf-8', errors='ignore')}"
+                            return
+                        
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                data_str = line[6:].strip()
+                                if data_str:
+                                    try:
+                                        data = json.loads(data_str)
+                                        candidates = data.get("candidates", [])
+                                        if candidates:
+                                            parts = candidates[0].get("content", {}).get("parts", [])
+                                            for part in parts:
+                                                text_chunk = part.get("text", "")
+                                                if text_chunk:
+                                                    yield text_chunk
+                                    except json.JSONDecodeError:
+                                        continue
+                        return  # สำเร็จ ออกจาก loop retry
+            except Exception as e:
+                if attempt < max_retries:
+                    await asyncio.sleep(1.5)
+                    continue
+                yield f"⚠️ การเชื่อมต่อขัดข้อง: {str(e)}"
+                return
 
     async def _stream_openai(self, message: str, api_key: str, session_id: str, extra_context: str = "") -> AsyncGenerator[str, None]:
         """เรียกใช้งาน OpenAI หรือ OpenAI-compatible API แบบ Streaming (รองรับ Groq, Ollama, DeepSeek)"""
