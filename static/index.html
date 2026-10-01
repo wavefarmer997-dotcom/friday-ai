@@ -153,6 +153,9 @@
                 </footer>
             </section>
 
+            <!-- Memory Panel Overlay Backdrop (for mobile) -->
+            <div class="memory-backdrop" id="memoryBackdrop"></div>
+
             <!-- Memory Inspector Slide Panel -->
             <aside class="memory-panel" id="memoryPanel">
                 <div class="panel-header">
@@ -197,7 +200,7 @@
                         <label>ผู้ให้บริการ AI (Provider):</label>
                         <select id="settingProvider" class="form-control">
                             <option value="openai">Groq / OpenAI (ความเร็วสูงพิเศษ • ใช้งานอยู่)</option>
-                            <option value="gemini">Google Gemini API (gemini-2.5-flash)</option>
+                            <option value="gemini">Google Gemini API (gemini-3.8-flash)</option>
                             <option value="mock">Smart Built-in Offline Mode</option>
                         </select>
                     </div>
@@ -218,7 +221,7 @@
 
                     <div class="form-group" id="modelGroup">
                         <label>ชื่อโมเดล (Model):</label>
-                        <input type="text" id="settingModel" class="form-control" value="gemini-2.5-flash" placeholder="เช่น gemini-2.5-flash, gemini-1.5-flash">
+                        <input type="text" id="settingModel" class="form-control" value="gemini-3.8-flash" placeholder="เช่น gemini-3.8-flash, gemini-2.0-flash">
                     </div>
 
                     <div class="form-group" id="baseUrlGroup" style="display: none;">
@@ -243,6 +246,55 @@
                     <div class="form-group">
                         <label>System Persona / บุคลิกภาพของ Friday:</label>
                         <textarea id="settingPersona" class="form-control" rows="3" placeholder="ปรับแต่งบุคลิกภาพหรือคำสั่งเฉพาะของ Friday"></textarea>
+                    </div>
+
+                    <!-- Obsidian Vault Auto-Sync Section -->
+                    <div class="obsidian-card">
+                        <div class="obsidian-header">
+                            <span class="obsidian-title">
+                                <i class="fa-solid fa-book-bookmark"></i> บันทึกข้อมูลลง Obsidian Vault
+                            </span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span class="obsidian-badge" id="obsidianStatusBadge">
+                                    <i class="fa-solid fa-circle-check"></i> เชื่อมต่อแล้ว
+                                </span>
+                                <label class="switch" title="เปิด/ปิด การบันทึกลง Obsidian">
+                                    <input type="checkbox" id="settingObsidianEnabled" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="input-with-action">
+                            <input type="text" id="settingObsidianPath" class="form-control" value="D:\ob\WIKI" placeholder="ที่อยู่โฟลเดอร์ เช่น D:\ob\WIKI">
+                            <button type="button" class="btn-addon" id="btnSyncObsidianNow" title="ซิงค์ข้อมูลและตรวจสอบการเชื่อมต่อ" style="right: 8px; font-size: 0.85rem; padding: 4px 8px; background: rgba(139, 92, 246, 0.25); border-radius: 6px; color: #c4b5fd;">
+                                <i class="fa-solid fa-arrows-rotate"></i> ซิงค์
+                            </button>
+                        </div>
+                        <small class="helper-text" style="color: #94a3b8;">
+                            📁 บันทึกประวัติบทสนทนารายวันลง <code>Chats/YYYY-MM-DD.md</code> และซิงค์แฟ้มความจำลง <code>Memories.md</code> แบบ Real-time
+                        </small>
+
+                        <!-- GitHub Auto-Push Sub-section -->
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(139, 92, 246, 0.25);">
+                            <div class="obsidian-header" style="margin-bottom: 6px;">
+                                <span class="obsidian-title" style="font-size: 0.88rem; color: #e2e8f0;">
+                                    <i class="fa-brands fa-github"></i> อัปโหลดลง GitHub อัตโนมัติ (ทุกครั้งที่เขียนเสร็จ)
+                                </span>
+                                <label class="switch" title="เปิด/ปิด Auto-Push ขึ้น GitHub">
+                                    <input type="checkbox" id="settingGithubEnabled" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="input-with-action">
+                                <input type="text" id="settingGithubRemoteUrl" class="form-control" placeholder="GitHub Repository URL เช่น https://github.com/wavefarmer997-dotcom/WIKI.git">
+                                <button type="button" class="btn-addon" id="btnGitPushNow" title="Push ขึ้น GitHub เดี๋ยวนี้" style="right: 8px; font-size: 0.85rem; padding: 4px 8px; background: rgba(59, 130, 246, 0.25); border-radius: 6px; color: #93c5fd;">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> Push
+                                </button>
+                            </div>
+                            <small class="helper-text" id="gitStatusText" style="color: #94a3b8; display: block; margin-top: 5px;">
+                                🐙 Git Auto-commit & push ไปยัง Branch <code>main</code> อัตโนมัติ
+                            </small>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -425,18 +477,30 @@
             </div>
 
             <div class="call-bottom-controls">
-                <button class="call-control-circle" id="callMuteMicBtn" onclick="toggleCallMic()" title="เปิด/ปิดไมโครโฟน">
-                    <i class="fa-solid fa-microphone"></i>
-                </button>
-                <button class="call-control-circle" id="callSpeakerToggleBtn" onclick="toggleCallSpeaker()" title="เปิด/ปิดเสียงลำโพงตอบกลับของ Friday">
-                    <i class="fa-solid fa-volume-high"></i>
-                </button>
-                <button class="call-control-circle hangup" onclick="endVoiceCall()" title="วางสายสนทนา">
-                    <i class="fa-solid fa-phone-slash"></i>
-                </button>
-                <button class="call-control-circle" id="callInterruptBtn" onclick="interruptFridaySpeech()" title="ขัดจังหวะเพื่อพูดทันที (Barge-in)">
-                    <i class="fa-solid fa-hand"></i>
-                </button>
+                <div class="call-control-item">
+                    <button class="call-control-circle" id="callMuteMicBtn" onclick="toggleCallMic()" title="เปิด/ปิดไมโครโฟน">
+                        <i class="fa-solid fa-microphone"></i>
+                    </button>
+                    <span class="call-control-label">ไมค์</span>
+                </div>
+                <div class="call-control-item">
+                    <button class="call-control-circle" id="callSpeakerToggleBtn" onclick="toggleCallSpeaker()" title="เปิด/ปิดเสียงลำโพงตอบกลับของ Friday">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <span class="call-control-label">เสียง</span>
+                </div>
+                <div class="call-control-item">
+                    <button class="call-control-circle hangup" onclick="endVoiceCall()" title="วางสายสนทนา">
+                        <i class="fa-solid fa-phone-slash"></i>
+                    </button>
+                    <span class="call-control-label">วางสาย</span>
+                </div>
+                <div class="call-control-item">
+                    <button class="call-control-circle" id="callInterruptBtn" onclick="interruptFridaySpeech()" title="ขัดจังหวะเพื่อพูดทันที (Barge-in)">
+                        <i class="fa-solid fa-hand"></i>
+                    </button>
+                    <span class="call-control-label">พูดแทรก</span>
+                </div>
             </div>
         </div>
     </div>

@@ -9,7 +9,7 @@ let currentBotContent = "";
 let isTtsEnabled = true;
 let isRecording = false;
 let recognition = null;
-let isMemoryPanelOpen = true;
+let isMemoryPanelOpen = window.innerWidth > 900;
 
 // Voice Call Mode Variables
 let isInVoiceCall = false;
@@ -31,6 +31,7 @@ const connectionText = document.getElementById("connectionText");
 const memoryToast = document.getElementById("memoryToast");
 const toastDesc = document.getElementById("toastDesc");
 const memoryPanel = document.getElementById("memoryPanel");
+const memoryBackdrop = document.getElementById("memoryBackdrop");
 const memoryList = document.getElementById("memoryList");
 const memoryCountBadge = document.getElementById("memoryCountBadge");
 const toggleMemoryBtn = document.getElementById("toggleMemoryBtn");
@@ -67,6 +68,10 @@ let deferredInstallPrompt = null;
 // ==================== Initialize Application ====================
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Initial collapse on mobile / small screens
+    if (!isMemoryPanelOpen && memoryPanel) {
+        memoryPanel.classList.add("collapsed");
+    }
     initWebSocket();
     initSpeechRecognition();
     fetchMemories();
@@ -74,6 +79,16 @@ document.addEventListener("DOMContentLoaded", () => {
     setupEventListeners();
     initPwaInstall();
 });
+
+function setMemoryPanelState(open) {
+    isMemoryPanelOpen = open;
+    if (memoryPanel) {
+        memoryPanel.classList.toggle("collapsed", !isMemoryPanelOpen);
+    }
+    if (memoryBackdrop) {
+        memoryBackdrop.classList.toggle("active", isMemoryPanelOpen && window.innerWidth <= 900);
+    }
+}
 
 function initPwaInstall() {
     // 1. ลงทะเบียน Service Worker สำหรับ PWA
@@ -132,15 +147,23 @@ function setupEventListeners() {
     sendBtn.addEventListener("click", sendMessage);
 
     // Toggle Memory Panel
-    toggleMemoryBtn.addEventListener("click", () => {
-        isMemoryPanelOpen = !isMemoryPanelOpen;
-        memoryPanel.classList.toggle("collapsed", !isMemoryPanelOpen);
-    });
+    if (toggleMemoryBtn) {
+        toggleMemoryBtn.addEventListener("click", () => {
+            setMemoryPanelState(!isMemoryPanelOpen);
+        });
+    }
 
-    closeMemoryBtn.addEventListener("click", () => {
-        isMemoryPanelOpen = false;
-        memoryPanel.classList.add("collapsed");
-    });
+    if (closeMemoryBtn) {
+        closeMemoryBtn.addEventListener("click", () => {
+            setMemoryPanelState(false);
+        });
+    }
+
+    if (memoryBackdrop) {
+        memoryBackdrop.addEventListener("click", () => {
+            setMemoryPanelState(false);
+        });
+    }
 
     // Toggle TTS
     toggleTtsBtn.addEventListener("click", () => {
@@ -161,6 +184,14 @@ function setupEventListeners() {
     const togglePolKeyBtn = document.getElementById("togglePollinationsKeyVisibility");
     if (togglePolKeyBtn) {
         togglePolKeyBtn.addEventListener("click", togglePollinationsKeyVisibility);
+    }
+    const btnSyncObsidian = document.getElementById("btnSyncObsidianNow");
+    if (btnSyncObsidian) {
+        btnSyncObsidian.addEventListener("click", syncObsidianNow);
+    }
+    const btnGitPush = document.getElementById("btnGitPushNow");
+    if (btnGitPush) {
+        btnGitPush.addEventListener("click", pushGithubNow);
     }
 
     // Quick Action Pills
@@ -1126,6 +1157,42 @@ async function fetchSettings() {
             const polInput = document.getElementById("settingPollinationsKey");
             if (polInput) polInput.placeholder = `ตั้งค่าแล้ว (${data.masked_pollinations_key})`;
         }
+        if (data.obsidian_vault_path) {
+            const obsPathInput = document.getElementById("settingObsidianPath");
+            if (obsPathInput) obsPathInput.value = data.obsidian_vault_path;
+        }
+        const obsEnabledCheckbox = document.getElementById("settingObsidianEnabled");
+        if (obsEnabledCheckbox) {
+            obsEnabledCheckbox.checked = !!data.obsidian_sync_enabled;
+        }
+        const obsBadge = document.getElementById("obsidianStatusBadge");
+        if (obsBadge) {
+            if (data.obsidian_available) {
+                obsBadge.className = "obsidian-badge";
+                obsBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> เชื่อมต่อแล้ว';
+            } else {
+                obsBadge.className = "obsidian-badge error";
+                obsBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ไม่พบโฟลเดอร์';
+            }
+        }
+        if (data.github_remote_url !== undefined) {
+            const ghUrlInput = document.getElementById("settingGithubRemoteUrl");
+            if (ghUrlInput) ghUrlInput.value = data.github_remote_url || "";
+        }
+        const ghEnabledCheckbox = document.getElementById("settingGithubEnabled");
+        if (ghEnabledCheckbox) {
+            ghEnabledCheckbox.checked = !!data.github_sync_enabled;
+        }
+        const gitStatusTxt = document.getElementById("gitStatusText");
+        if (gitStatusTxt && data.git_info) {
+            const credBadge = data.git_info.has_credentials ? '<span style="color:#4ade80; font-weight: 500;">(เชื่อมต่อบัญชีแล้ว ✓)</span>' : '';
+            if (data.git_info.has_remote) {
+                const statusColor = data.git_info.last_git_status && data.git_info.last_git_status.includes("ไม่สำเร็จ") ? "#f87171" : "#94a3b8";
+                gitStatusTxt.innerHTML = `🐙 Remote: <code>${data.git_info.remote_url}</code> ${credBadge}<br><span style="color:${statusColor}; display:inline-block; margin-top:3px;">⚡ สถานะ: ${data.git_info.last_git_status || 'พร้อมใช้งาน'}</span>`;
+            } else {
+                gitStatusTxt.innerHTML = `🐙 Git ในเครื่องพร้อมแล้ว ${credBadge} (ใส่ GitHub Remote URL เพื่อเปิด Auto-Push อัตโนมัติ)`;
+            }
+        }
         handleProviderChange();
     } catch (e) {
         console.error("Failed to load settings:", e);
@@ -1147,7 +1214,7 @@ function handleProviderChange() {
         modelGroup.style.display = "flex";
         baseUrlGroup.style.display = "none";
         if (document.getElementById("settingModel").value.includes("gpt")) {
-            document.getElementById("settingModel").value = "gemini-2.5-flash";
+            document.getElementById("settingModel").value = "gemini-3.8-flash";
         }
     } else if (provider === "openai") {
         apiKeyGroup.style.display = "flex";
@@ -1215,6 +1282,16 @@ async function saveSettings() {
     if (apiKey) payload.api_key = apiKey;
     if (polKey) payload.pollinations_api_key = polKey;
 
+    const obsEnabledInput = document.getElementById("settingObsidianEnabled");
+    if (obsEnabledInput) payload.obsidian_sync_enabled = obsEnabledInput.checked;
+    const obsPathInput = document.getElementById("settingObsidianPath");
+    if (obsPathInput) payload.obsidian_vault_path = obsPathInput.value.trim();
+
+    const ghEnabledInput = document.getElementById("settingGithubEnabled");
+    if (ghEnabledInput) payload.github_sync_enabled = ghEnabledInput.checked;
+    const ghUrlInput = document.getElementById("settingGithubRemoteUrl");
+    if (ghUrlInput) payload.github_remote_url = ghUrlInput.value.trim();
+
     try {
         await fetch("/api/settings", {
             method: "POST",
@@ -1226,5 +1303,47 @@ async function saveSettings() {
         fetchSettings();
     } catch (e) {
         alert("เกิดข้อผิดพลาดในการบันทึกการตั้งค่า");
+    }
+}
+
+async function syncObsidianNow() {
+    const btn = document.getElementById("btnSyncObsidianNow");
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ซิงค์...';
+    try {
+        const res = await fetch("/api/obsidian/sync-now", { method: "POST" });
+        const result = await res.json();
+        if (result.status === "success") {
+            alert(`✅ ซิงค์สำเร็จ!\n• บันทึกข้อมูลลง: ${result.vault_path}\n• จำนวนความจำที่ซิงค์: ${result.synced_memories} รายการ`);
+            fetchSettings();
+        } else {
+            alert("⚠️ ไม่สามารถเข้าถึงโฟลเดอร์ Obsidian ได้ กรุณาตรวจสอบตำแหน่งที่ระบุ");
+        }
+    } catch (err) {
+        alert("เกิดข้อผิดพลาดในการซิงค์: " + err.message);
+    } finally {
+        btn.innerHTML = originalHtml;
+    }
+}
+
+async function pushGithubNow() {
+    const btn = document.getElementById("btnGitPushNow");
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Push...';
+    try {
+        const res = await fetch("/api/obsidian/git-push", { method: "POST" });
+        const result = await res.json();
+        if (result.status === "success") {
+            alert(`✅ อัปเดตขึ้น GitHub สำเร็จ!\n• ${result.message}`);
+        } else {
+            alert(`ℹ️ สถานะ Git: ${result.message}\n(หากยังไม่ได้เชื่อม Remote กรุณาใส่ URL ของ GitHub Repository แล้วบันทึกการตั้งค่า)`);
+        }
+        fetchSettings();
+    } catch (err) {
+        alert("เกิดข้อผิดพลาดในการ Push: " + err.message);
+    } finally {
+        btn.innerHTML = originalHtml;
     }
 }

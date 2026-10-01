@@ -14,12 +14,25 @@ from typing import Optional, List, Dict, Any
 
 from memory_engine import MemoryEngine
 from ai_service import AIService
+from obsidian_sync import ObsidianSync
 
 app = FastAPI(title="Friday - Real-time AI Assistant with Memory")
 
-# เริ่มต้นระบบความจำและบริการ AI
+# เริ่มต้นระบบความจำ บริการ AI และระบบซิงค์ Obsidian Vault
 memory_engine = MemoryEngine()
 ai_service = AIService(memory_engine)
+obsidian_sync = ObsidianSync(
+    vault_path=memory_engine.get_setting("obsidian_vault_path", r"D:\ob\WIKI"),
+    enabled=(memory_engine.get_setting("obsidian_sync_enabled", "true").lower() in ("true", "1", "yes")),
+    github_sync_enabled=(memory_engine.get_setting("github_sync_enabled", "true").lower() in ("true", "1", "yes")),
+    github_remote_url=memory_engine.get_setting("github_remote_url", "")
+)
+
+# ซิงค์ข้อมูลความจำที่มีอยู่ลง Obsidian ในช่วงเริ่มต้นระบบ
+try:
+    obsidian_sync.sync_memories(memory_engine.get_all_memories())
+except Exception as e:
+    print(f"[Obsidian] Initial sync error: {e}")
 
 # ตรวจหาตำแหน่งโฟลเดอร์ static อัตโนมัติ (รองรับทั้ง root และ subfolder)
 possible_static_dirs = [
@@ -41,7 +54,7 @@ os.makedirs(os.path.join(STATIC_DIR, "js"), exist_ok=True)
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def serve_index():
     for p in possible_static_dirs:
         index_file = os.path.join(p, "index.html")
@@ -52,6 +65,11 @@ async def serve_index():
         "debug_cwd": os.getcwd(),
         "debug_dirs": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else []
     }
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health_check():
+    return {"status": "ok", "app": "Friday AI"}
+
 
 # ==================== Natural Female Voice TTS API ====================
 from fastapi.responses import Response
@@ -163,18 +181,23 @@ async def add_memory(item: MemoryCreate):
         content=item.content,
         importance=item.importance
     )
-    return {"status": "success", "id": mem_id, "memories": memory_engine.get_all_memories()}
+    all_mems = memory_engine.get_all_memories()
+    obsidian_sync.sync_memories(all_mems)
+    return {"status": "success", "id": mem_id, "memories": all_mems}
 
 @app.delete("/api/memories/{memory_id}")
 async def delete_memory(memory_id: int):
     deleted = memory_engine.delete_memory(memory_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found")
-    return {"status": "success", "deleted_id": memory_id, "memories": memory_engine.get_all_memories()}
+    all_mems = memory_engine.get_all_memories()
+    obsidian_sync.sync_memories(all_mems)
+    return {"status": "success", "deleted_id": memory_id, "memories": all_mems}
 
 @app.post("/api/memories/clear")
 async def clear_memories():
     memory_engine.clear_all_memories()
+    obsidian_sync.sync_memories([])
     return {"status": "success", "memories": []}
 
 # ==================== REST APIs: History & Settings ====================
@@ -197,6 +220,10 @@ class SettingsUpdate(BaseModel):
     temperature: Optional[str] = None
     custom_persona: Optional[str] = None
     pollinations_api_key: Optional[str] = None
+    obsidian_sync_enabled: Optional[bool] = None
+    obsidian_vault_path: Optional[str] = None
+    github_sync_enabled: Optional[bool] = None
+    github_remote_url: Optional[str] = None
 
 @app.get("/api/settings")
 async def get_settings():
@@ -204,6 +231,13 @@ async def get_settings():
     masked_key = (raw_key[:4] + "..." + raw_key[-4:]) if len(raw_key) > 8 else ("*" * len(raw_key))
     pol_key = memory_engine.get_setting("pollinations_api_key", "")
     masked_pol_key = (pol_key[:4] + "..." + pol_key[-4:]) if len(pol_key) > 8 else ("*" * len(pol_key))
+    obs_enabled = memory_engine.get_setting("obsidian_sync_enabled", "true").lower() in ("true", "1", "yes")
+    obs_path = memory_engine.get_setting("obsidian_vault_path", r"D:\ob\WIKI")
+    gh_enabled = memory_engine.get_setting("github_sync_enabled", "true").lower() in ("true", "1", "yes")
+    gh_url = memory_engine.get_setting("github_remote_url", obsidian_sync.get_remote_url())
+
+    git_info = obsidian_sync.get_git_info()
+
     return {
         "api_provider": memory_engine.get_setting("api_provider", "gemini"),
         "has_api_key": bool(raw_key.strip()),
@@ -213,7 +247,13 @@ async def get_settings():
         "temperature": memory_engine.get_setting("temperature", "0.7"),
         "custom_persona": memory_engine.get_setting("custom_persona", ""),
         "has_pollinations_key": bool(pol_key.strip()),
-        "masked_pollinations_key": masked_pol_key
+        "masked_pollinations_key": masked_pol_key,
+        "obsidian_sync_enabled": obs_enabled,
+        "obsidian_vault_path": obs_path,
+        "obsidian_available": obsidian_sync.is_available(),
+        "github_sync_enabled": gh_enabled,
+        "github_remote_url": gh_url,
+        "git_info": git_info
     }
 
 @app.post("/api/settings")
@@ -232,7 +272,50 @@ async def update_settings(settings: SettingsUpdate):
         memory_engine.set_setting("custom_persona", settings.custom_persona)
     if settings.pollinations_api_key is not None and settings.pollinations_api_key.strip():
         memory_engine.set_setting("pollinations_api_key", settings.pollinations_api_key.strip())
+    if settings.obsidian_sync_enabled is not None:
+        memory_engine.set_setting("obsidian_sync_enabled", "true" if settings.obsidian_sync_enabled else "false")
+        obsidian_sync.enabled = settings.obsidian_sync_enabled
+    if settings.obsidian_vault_path is not None:
+        clean_path = settings.obsidian_vault_path.strip()
+        memory_engine.set_setting("obsidian_vault_path", clean_path)
+        obsidian_sync.vault_path = clean_path
+    if settings.github_sync_enabled is not None:
+        memory_engine.set_setting("github_sync_enabled", "true" if settings.github_sync_enabled else "false")
+        obsidian_sync.github_sync_enabled = settings.github_sync_enabled
+    if settings.github_remote_url is not None:
+        clean_gh_url = settings.github_remote_url.strip()
+        memory_engine.set_setting("github_remote_url", clean_gh_url)
+        obsidian_sync.set_remote_url(clean_gh_url)
     return {"status": "success"}
+
+@app.post("/api/obsidian/sync-now")
+async def api_obsidian_sync_now():
+    try:
+        mems = memory_engine.get_all_memories()
+        mem_ok = obsidian_sync.sync_memories(mems)
+        return {
+            "status": "success" if mem_ok else "failed",
+            "vault_path": obsidian_sync.vault_path,
+            "is_available": obsidian_sync.is_available(),
+            "synced_memories": len(mems)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/obsidian/git-push")
+async def api_obsidian_git_push():
+    try:
+        from datetime import datetime
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        success = obsidian_sync._git_commit_and_push(f"Manual push from Friday UI ({now_str})")
+        git_info = obsidian_sync.get_git_info()
+        return {
+            "status": "success" if success else "failed",
+            "message": obsidian_sync.last_git_status,
+            "git_info": git_info
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== WebSocket: Real-time Streaming ====================
 
@@ -264,6 +347,8 @@ async def websocket_chat(websocket: WebSocket):
                 # 2. วิเคราะห์ข้อมูลสำคัญเพื่อจดจำอัตโนมัติ (Auto-Extract Fact)
                 new_memories = memory_engine.auto_extract_and_remember(user_message)
                 if new_memories:
+                    # ซิงค์ความจำลง Obsidian Vault ทันที
+                    obsidian_sync.sync_memories(memory_engine.get_all_memories())
                     # ส่งแจ้งเตือนว่าบอทบันทึกความจำใหม่แล้ว
                     await websocket.send_json({
                         "type": "memory_learned",
@@ -284,6 +369,9 @@ async def websocket_chat(websocket: WebSocket):
                 
                 # 4. บันทึกคำตอบของบอทลงประวัติการสนทนา
                 memory_engine.add_message(session_id, "assistant", full_reply)
+
+                # 4.1 บันทึกบทสนทนาลงใน Obsidian Vault (Chats/YYYY-MM-DD.md) แบบ Real-time ทันที
+                obsidian_sync.log_chat_exchange(session_id, user_message, full_reply)
 
                 # 5. สิ้นสุดการสตรีม
                 await websocket.send_json({
