@@ -809,10 +809,12 @@ function fallbackBrowserTts(text, onFinish) {
         utterance.pitch = 1.1;
 
         const voices = window.speechSynthesis.getVoices();
-        const femaleVoice = voices.find(v => 
-            (v.lang.includes("th") || v.lang.includes("TH")) && 
-            (v.name.includes("Premwadee") || v.name.includes("Achara") || v.name.includes("Google") || v.name.toLowerCase().includes("female") || !v.name.includes("Niwat"))
-        ) || voices.find(v => v.lang.includes("th") || v.lang.includes("TH"));
+        const thaiVoices = voices.filter(v => v.lang.includes("th") || v.lang.includes("TH"));
+        const maleNames = ["niwat", "male", "man"];
+        const femaleNames = ["premwadee", "achara", "kanya", "female", "woman", "girl", "google"];
+        const femaleVoice = thaiVoices.find(v => femaleNames.some(n => v.name.toLowerCase().includes(n)))
+            || thaiVoices.find(v => !maleNames.some(n => v.name.toLowerCase().includes(n)))
+            || thaiVoices[0];
 
         if (femaleVoice) utterance.voice = femaleVoice;
         utterance.onend = () => { if (onFinish) onFinish(); };
@@ -1204,6 +1206,7 @@ function handleProviderChange() {
     const apiKeyGroup = document.getElementById("apiKeyGroup");
     const modelGroup = document.getElementById("modelGroup");
     const baseUrlGroup = document.getElementById("baseUrlGroup");
+    const helperText = document.getElementById("apiKeyHelperText");
 
     if (provider === "mock") {
         apiKeyGroup.style.display = "none";
@@ -1213,21 +1216,32 @@ function handleProviderChange() {
         apiKeyGroup.style.display = "flex";
         modelGroup.style.display = "flex";
         baseUrlGroup.style.display = "none";
-        if (document.getElementById("settingModel").value.includes("gpt")) {
+        if (document.getElementById("settingModel").value.includes("gpt") || document.getElementById("settingModel").value.includes("claude")) {
             document.getElementById("settingModel").value = "gemini-3.8-flash";
         }
+        if (helperText) helperText.innerHTML = 'สมัครขอ Google Gemini API Key ได้ฟรีที่: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>';
     } else if (provider === "openai") {
         apiKeyGroup.style.display = "flex";
         modelGroup.style.display = "flex";
         baseUrlGroup.style.display = "flex";
         const currentModel = document.getElementById("settingModel").value;
-        if (!currentModel || currentModel.includes("gemini")) {
+        if (!currentModel || currentModel.includes("gemini") || currentModel.includes("claude")) {
             document.getElementById("settingModel").value = "qwen/qwen3.8-27b";
         }
         const currentUrl = document.getElementById("settingBaseUrl").value;
         if (!currentUrl || currentUrl.includes("api.openai.com")) {
             document.getElementById("settingBaseUrl").value = "https://api.groq.com/openai/v1";
         }
+        if (helperText) helperText.innerHTML = 'รับ Groq API Key ฟรีที่: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">Groq Console</a> หรือ <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">OpenAI Platform</a>';
+    } else if (provider === "claude") {
+        apiKeyGroup.style.display = "flex";
+        modelGroup.style.display = "flex";
+        baseUrlGroup.style.display = "none";
+        const currentModel = document.getElementById("settingModel").value;
+        if (!currentModel || !currentModel.startsWith("claude")) {
+            document.getElementById("settingModel").value = "claude-sonnet-4-5";
+        }
+        if (helperText) helperText.innerHTML = 'รับ Claude API Key ได้ที่: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">Anthropic Console</a> (ต้องเติมเครดิตก่อนใช้งาน)';
     }
 }
 

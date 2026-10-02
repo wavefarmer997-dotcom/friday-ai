@@ -201,6 +201,7 @@
                         <select id="settingProvider" class="form-control">
                             <option value="openai">Groq / OpenAI (ความเร็วสูงพิเศษ • ใช้งานอยู่)</option>
                             <option value="gemini">Google Gemini API (gemini-3.8-flash)</option>
+                            <option value="claude">Anthropic Claude (claude-sonnet-4-5)</option>
                             <option value="mock">Smart Built-in Offline Mode</option>
                         </select>
                     </div>
@@ -208,12 +209,12 @@
                     <div class="form-group" id="apiKeyGroup">
                         <label>API Key:</label>
                         <div class="input-with-action">
-                            <input type="password" id="settingApiKey" class="form-control" placeholder="ใส่ Gemini หรือ OpenAI API Key">
+                            <input type="password" id="settingApiKey" class="form-control" placeholder="ใส่ API Key">
                             <button type="button" class="btn-addon" id="toggleKeyVisibility">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
                         </div>
-                        <small class="helper-text">
+                        <small class="helper-text" id="apiKeyHelperText">
                             สมัครขอ Google Gemini API Key ได้ฟรีที่: 
                             <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>
                         </small>

@@ -359,6 +359,10 @@ class AIService:
         elif api_provider == "openai" and api_key:
             async for chunk in self._stream_openai(message, api_key, session_id, extra_context=search_context):
                 yield chunk
+        # หากมี API Key และเลือก Claude (Anthropic)
+        elif api_provider == "claude" and api_key:
+            async for chunk in self._stream_claude(message, api_key, session_id, extra_context=search_context):
+                yield chunk
         # Fallback โหมดอัจฉริยะ: ใช้งานได้ทันที จำข้อมูลได้จริง
         else:
             async for chunk in self._stream_smart_fallback(message, session_id):
@@ -489,6 +493,73 @@ class AIService:
                                 continue
         except Exception as e:
             yield f"⚠️ การเชื่อมต่อขัดข้อง: {str(e)}"
+
+    async def _stream_claude(self, message: str, api_key: str, session_id: str, extra_context: str = "") -> AsyncGenerator[str, None]:
+        """เรียกใช้งาน Anthropic Claude API แบบ Streaming ผ่าน Messages API พร้อม SSE"""
+        model = self.memory.get_setting("model_name", "claude-sonnet-4-5")
+        if not model or not model.startswith("claude"):
+            model = "claude-sonnet-4-5"
+        url = "https://api.anthropic.com/v1/messages"
+
+        system_instruction = self.build_system_prompt(extra_context=extra_context)
+        history = self.memory.get_recent_history(session_id, limit=20)
+
+        messages = []
+        for h in history:
+            role = "user" if h["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": h["message"]})
+        messages.append({"role": "user", "content": message})
+
+        payload = {
+            "model": model,
+            "max_tokens": 8192,
+            "system": system_instruction,
+            "messages": messages,
+            "stream": True,
+            "temperature": float(self.memory.get_setting("temperature", "0.7")),
+        }
+
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "User-Agent": "FridayAssistant/2.5"
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code == 401:
+                        yield "⚠️ Claude API Key ไม่ถูกต้องหรือหมดอายุค่ะ กรุณาตรวจสอบและอัปเดต API Key ในการตั้งค่าใหม่นะคะ"
+                        return
+                    elif response.status_code == 429:
+                        yield "⚠️ Claude API กำลังถูกใช้งานหนาแน่น (Rate Limit) กรุณารอสักครู่แล้วลองใหม่นะคะ"
+                        return
+                    elif response.status_code != 200:
+                        err_text = await response.aread()
+                        yield f"⚠️ เกิดข้อผิดพลาดจาก Claude API (รหัส {response.status_code}): {err_text.decode('utf-8', errors='ignore')}"
+                        return
+
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if not data_str:
+                                continue
+                            try:
+                                data = json.loads(data_str)
+                                event_type = data.get("type", "")
+                                if event_type == "content_block_delta":
+                                    delta = data.get("delta", {})
+                                    if delta.get("type") == "text_delta":
+                                        chunk = delta.get("text", "")
+                                        if chunk:
+                                            yield chunk
+                                elif event_type == "message_stop":
+                                    break
+                            except json.JSONDecodeError:
+                                continue
+        except Exception as e:
+            yield f"⚠️ การเชื่อมต่อ Claude ขัดข้อง: {str(e)}"
 
     async def _stream_smart_fallback(self, message: str, session_id: str) -> AsyncGenerator[str, None]:
         """
