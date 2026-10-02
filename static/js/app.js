@@ -1225,8 +1225,8 @@ function handleProviderChange() {
         modelGroup.style.display = "flex";
         baseUrlGroup.style.display = "flex";
         const currentModel = document.getElementById("settingModel").value;
-        if (!currentModel || currentModel.includes("gemini") || currentModel.includes("claude") || currentModel.includes("qwen") || currentModel.includes("moonshot")) {
-            document.getElementById("settingModel").value = "llama-3.3-70b-versatile";
+        if (!currentModel || currentModel.includes("gemini") || currentModel.includes("claude") || currentModel.includes("qwen") || currentModel.includes("moonshot") || currentModel.includes("llama-3.3") || currentModel.includes("deepseek-r1-distill-llama")) {
+            document.getElementById("settingModel").value = "llama-3.1-8b-instant";
         }
         const currentUrl = document.getElementById("settingBaseUrl").value;
         if (!currentUrl || currentUrl.includes("api.openai.com")) {

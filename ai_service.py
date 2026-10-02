@@ -445,7 +445,7 @@ class AIService:
     async def _stream_openai(self, message: str, api_key: str, session_id: str, extra_context: str = "") -> AsyncGenerator[str, None]:
         """เรียกใช้งาน OpenAI หรือ OpenAI-compatible API แบบ Streaming (รองรับ Groq, Ollama, DeepSeek)"""
         base_url = self.memory.get_setting("openai_base_url", "https://api.groq.com/openai/v1").strip().rstrip("/")
-        model = self.memory.get_setting("model_name", "llama-3.3-70b-versatile").strip()
+        model = self.memory.get_setting("model_name", "llama-3.1-8b-instant").strip()
         url = f"{base_url}/chat/completions"
 
         # ตรวจสอบเบื้องต้นสำหรับ Groq API Key
@@ -481,11 +481,11 @@ class AIService:
                     if response.status_code != 200:
                         err_text = (await response.aread()).decode('utf-8', errors='ignore')
                         if "model_not_found" in err_text or "model_decommissioned" in err_text or response.status_code in [400, 404]:
-                            yield f"⚠️ **โมเดล '{model}' ถูกยกเลิกใช้งาน (decommissioned) หรือไม่พบใน Groq ค่ะ**\n\n"
-                            yield f"**โมเดลที่แนะนำให้ใช้บน Groq (เปิดใช้งานได้แน่นอน 100%):**\n"
-                            yield f"• `llama-3.3-70b-versatile` (แนะนำหลัก: เขียนโค้ด + ตอบคำถามได้ดีที่สุด)\n"
-                            yield f"• `llama-3.1-8b-instant` (ตอบกลับเร็วมากพิเศษ)\n"
-                            yield f"• `deepseek-r1-distill-qwen-32b` (โมเดลคิดวิเคราะห์ Reasoning)\n\n"
+                            yield f"⚠️ **โมเดล '{model}' ไม่พบหรือถูกยกเลิก (decommissioned) บน Groq ค่ะ**\n\n"
+                            yield f"**โมเดลที่แนะนำให้ใช้บน Groq (เปิดใช้งานได้แน่นอน):**\n"
+                            yield f"• `llama-3.1-8b-instant` (แนะนำหลัก: ทำงานเร็วมาก ฟรี 100%)\n"
+                            yield f"• `qwen-2.5-coder-32b` (เก่งเขียนโค้ดและพัฒนาโปรแกรม)\n"
+                            yield f"• `openai/gpt-oss-120b` (คิดวิเคราะห์ฉลาดระดับสูง)\n\n"
                             yield f"*รายละเอียดจากเซิร์ฟเวอร์:* `{err_text}`"
                         else:
                             yield f"⚠️ เกิดข้อผิดพลาดจาก API (รหัส {response.status_code}): {err_text}"
