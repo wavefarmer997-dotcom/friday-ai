@@ -12,7 +12,12 @@ import subprocess
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-DEFAULT_VAULT_PATH = r"D:\ob\WIKI"
+import platform
+
+# ตรวจสอบ OS: บน Linux/Cloud (Render) ให้ fallback เป็น ./obsidian_vault
+_is_windows = platform.system() == "Windows"
+DEFAULT_VAULT_PATH = r"D:\ob\WIKI" if _is_windows else os.path.join(os.path.dirname(__file__), "obsidian_vault")
+
 
 
 def safe_log(msg: str):

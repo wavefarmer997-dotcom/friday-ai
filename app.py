@@ -21,10 +21,14 @@ app = FastAPI(title="Friday - Real-time AI Assistant with Memory")
 # เริ่มต้นระบบความจำ บริการ AI และระบบซิงค์ Obsidian Vault
 memory_engine = MemoryEngine()
 ai_service = AIService(memory_engine)
+
+import platform as _platform
+_on_cloud = _platform.system() != "Windows"  # บน Render/Linux ปิด Obsidian sync อัตโนมัติ
+
 obsidian_sync = ObsidianSync(
-    vault_path=memory_engine.get_setting("obsidian_vault_path", r"D:\ob\WIKI"),
-    enabled=(memory_engine.get_setting("obsidian_sync_enabled", "true").lower() in ("true", "1", "yes")),
-    github_sync_enabled=(memory_engine.get_setting("github_sync_enabled", "true").lower() in ("true", "1", "yes")),
+    vault_path=memory_engine.get_setting("obsidian_vault_path", r"D:\ob\WIKI") if not _on_cloud else os.path.join(os.path.dirname(__file__), "obsidian_vault"),
+    enabled=False if _on_cloud else (memory_engine.get_setting("obsidian_sync_enabled", "true").lower() in ("true", "1", "yes")),
+    github_sync_enabled=False if _on_cloud else (memory_engine.get_setting("github_sync_enabled", "true").lower() in ("true", "1", "yes")),
     github_remote_url=memory_engine.get_setting("github_remote_url", "")
 )
 
