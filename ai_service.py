@@ -444,9 +444,14 @@ class AIService:
 
     async def _stream_openai(self, message: str, api_key: str, session_id: str, extra_context: str = "") -> AsyncGenerator[str, None]:
         """เรียกใช้งาน OpenAI หรือ OpenAI-compatible API แบบ Streaming (รองรับ Groq, Ollama, DeepSeek)"""
-        base_url = self.memory.get_setting("openai_base_url", "https://api.openai.com/v1").rstrip("/")
-        model = self.memory.get_setting("model_name", "openai/gpt-oss-120b")
+        base_url = self.memory.get_setting("openai_base_url", "https://api.groq.com/openai/v1").strip().rstrip("/")
+        model = self.memory.get_setting("model_name", "llama-3.3-70b-versatile").strip()
         url = f"{base_url}/chat/completions"
+
+        # ตรวจสอบเบื้องต้นสำหรับ Groq API Key
+        if "groq.com" in base_url and not api_key.startswith("gsk_"):
+            yield "⚠️ **API Key ไม่ถูกต้องสำหรับ Groq!**\n\nGroq API Key ต้องขึ้นต้นด้วย **`gsk_`** เสมอค่ะ (Key ที่ใส่อยู่ไม่ใช่ของ Groq)\n\n👉 กรุณาสร้าง Key ใหม่ฟรีที่: **[console.groq.com/keys](https://console.groq.com/keys)** แล้วนำมาใส่ในช่อง **API Key** ในหน้าตั้งค่าค่ะ 🎯"
+            return
 
         system_instruction = self.build_system_prompt(extra_context=extra_context)
         history = self.memory.get_recent_history(session_id, limit=20)
@@ -465,7 +470,7 @@ class AIService:
         }
 
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {api_key.strip()}",
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) FridayAssistant/2.5"
         }
@@ -474,8 +479,16 @@ class AIService:
             async with httpx.AsyncClient(timeout=90.0) as client:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
                     if response.status_code != 200:
-                        err_text = await response.aread()
-                        yield f"⚠️ เกิดข้อผิดพลาดจาก API (รหัส {response.status_code}): {err_text.decode('utf-8', errors='ignore')}"
+                        err_text = (await response.aread()).decode('utf-8', errors='ignore')
+                        if "model_not_found" in err_text or response.status_code == 404:
+                            yield f"⚠️ **โมเดล '{model}' ไม่พบ หรือ API Key ไม่มีสิทธิ์เข้าถึงค่ะ**\n\n"
+                            yield f"**โมเดลแนะนำบน Groq (ฟรีและเก่งมาก):**\n"
+                            yield f"• `llama-3.3-70b-versatile` (ฉลาดสุด เขียนโค้ดดีมาก)\n"
+                            yield f"• `deepseek-r1-distill-llama-70b` (คิดวิเคราะห์ + เขียนโค้ด)\n"
+                            yield f"• `llama-3.1-8b-instant` (ตอบกลับเร็วมาก)\n\n"
+                            yield f"*รายละเอียดเพิ่มเติมจากเซิร์ฟเวอร์:* `{err_text}`"
+                        else:
+                            yield f"⚠️ เกิดข้อผิดพลาดจาก API (รหัส {response.status_code}): {err_text}"
                         return
 
                     async for line in response.aiter_lines():
