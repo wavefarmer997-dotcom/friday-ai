@@ -480,13 +480,13 @@ class AIService:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
                     if response.status_code != 200:
                         err_text = (await response.aread()).decode('utf-8', errors='ignore')
-                        if "model_not_found" in err_text or response.status_code == 404:
-                            yield f"⚠️ **โมเดล '{model}' ไม่พบ หรือ API Key ไม่มีสิทธิ์เข้าถึงค่ะ**\n\n"
-                            yield f"**โมเดลแนะนำบน Groq (ฟรีและเก่งมาก):**\n"
-                            yield f"• `llama-3.3-70b-versatile` (ฉลาดสุด เขียนโค้ดดีมาก)\n"
-                            yield f"• `deepseek-r1-distill-llama-70b` (คิดวิเคราะห์ + เขียนโค้ด)\n"
-                            yield f"• `llama-3.1-8b-instant` (ตอบกลับเร็วมาก)\n\n"
-                            yield f"*รายละเอียดเพิ่มเติมจากเซิร์ฟเวอร์:* `{err_text}`"
+                        if "model_not_found" in err_text or "model_decommissioned" in err_text or response.status_code in [400, 404]:
+                            yield f"⚠️ **โมเดล '{model}' ถูกยกเลิกใช้งาน (decommissioned) หรือไม่พบใน Groq ค่ะ**\n\n"
+                            yield f"**โมเดลที่แนะนำให้ใช้บน Groq (เปิดใช้งานได้แน่นอน 100%):**\n"
+                            yield f"• `llama-3.3-70b-versatile` (แนะนำหลัก: เขียนโค้ด + ตอบคำถามได้ดีที่สุด)\n"
+                            yield f"• `llama-3.1-8b-instant` (ตอบกลับเร็วมากพิเศษ)\n"
+                            yield f"• `deepseek-r1-distill-qwen-32b` (โมเดลคิดวิเคราะห์ Reasoning)\n\n"
+                            yield f"*รายละเอียดจากเซิร์ฟเวอร์:* `{err_text}`"
                         else:
                             yield f"⚠️ เกิดข้อผิดพลาดจาก API (รหัส {response.status_code}): {err_text}"
                         return
