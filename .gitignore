@@ -14,6 +14,11 @@ data/
 *.sqlite
 *.sqlite3
 
+# ----- SSL & Temp Files -----
+*.pem
+test_voice.mp3
+
+
 # ----- รูปภาพที่ AI สร้าง (ไฟล์ชั่วคราว ใหญ่เกิน) -----
 static/generated_images/
 

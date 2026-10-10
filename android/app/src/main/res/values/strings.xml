@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Friday AI</string>
+    <string name="default_server_url">http://192.168.144.102:8000</string>
+    <string name="connecting">กำลังเชื่อมต่อไปยัง Friday...</string>
+    <string name="connection_error">ไม่สามารถเชื่อมต่อเครื่องหลักได้</string>
+    <string name="connection_error_desc">กรุณาตรวจสอบว่าคอมพิวเตอร์เปิดรันโปรแกรม Friday อยู่ และมือถือต่อ Wi-Fi วงเดียวกัน</string>
+    <string name="retry">ลองเชื่อมต่อใหม่</string>
+    <string name="settings">ตั้งค่า Server IP</string>
+    <string name="save">บันทึก</string>
+    <string name="cancel">ยกเลิก</string>
+    <string name="enter_server_ip">ระบุ URL / IP ของเครื่องหลัก:</string>
+</resources>

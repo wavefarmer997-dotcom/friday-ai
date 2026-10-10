@@ -18,8 +18,13 @@ if %errorlevel% neq 0 (
     pip install -r requirements.txt
 )
 
-echo [*] Starting Friday Server...
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:8000"
+echo [*] Checking SSL for Mobile Voice...
+python -c "from ssl_helper import ensure_ssl_certificates; ensure_ssl_certificates()" 2>nul
+
 python get_mobile_link.py
+
+start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:8000"
+
+echo [*] Starting Friday Server on http://0.0.0.0:8000 ...
 python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 pause

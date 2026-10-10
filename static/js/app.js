@@ -65,6 +65,29 @@ const lightboxDownloadBtn = document.getElementById("lightboxDownloadBtn");
 const installPwaBtn = document.getElementById("installPwaBtn");
 let deferredInstallPrompt = null;
 
+// ==================== Attachment System DOM Elements & State ====================
+const attachImageBtn = document.getElementById("attachImageBtn");
+const attachFolderBtn = document.getElementById("attachFolderBtn");
+const imageFileInput = document.getElementById("imageFileInput");
+const folderFileInput = document.getElementById("folderFileInput");
+const docFileInput = document.getElementById("docFileInput");
+const attachmentTray = document.getElementById("attachmentTray");
+const trayItemsContainer = document.getElementById("trayItemsContainer");
+const attachmentCountEl = document.getElementById("attachmentCount");
+const clearAllAttachmentsBtn = document.getElementById("clearAllAttachmentsBtn");
+const dragDropOverlay = document.getElementById("dragDropOverlay");
+const chatSection = document.getElementById("chatSection");
+const folderTreeModal = document.getElementById("folderTreeModal");
+const folderModalTitle = document.getElementById("folderModalTitle");
+const folderModalSubtitle = document.getElementById("folderModalSubtitle");
+const folderModalTree = document.getElementById("folderModalTree");
+
+let currentAttachments = {
+    images: [],
+    folder: null,
+    files: []
+};
+
 // ==================== Initialize Application ====================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -78,6 +101,8 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchSettings();
     setupEventListeners();
     initPwaInstall();
+    initDragAndDrop();
+    window.addEventListener("paste", handlePasteEvent);
 });
 
 function setMemoryPanelState(open) {
@@ -146,6 +171,19 @@ function setupEventListeners() {
 
     sendBtn.addEventListener("click", sendMessage);
 
+    // Attachment Event Listeners
+    if (attachImageBtn && imageFileInput) {
+        attachImageBtn.addEventListener("click", () => imageFileInput.click());
+        imageFileInput.addEventListener("change", handleImageFileSelect);
+    }
+    if (attachFolderBtn && folderFileInput) {
+        attachFolderBtn.addEventListener("click", () => folderFileInput.click());
+        folderFileInput.addEventListener("change", handleFolderFileSelect);
+    }
+    if (clearAllAttachmentsBtn) {
+        clearAllAttachmentsBtn.addEventListener("click", clearAllAttachments);
+    }
+
     // Toggle Memory Panel
     if (toggleMemoryBtn) {
         toggleMemoryBtn.addEventListener("click", () => {
@@ -181,6 +219,23 @@ function setupEventListeners() {
     document.getElementById("saveSettingsBtn").addEventListener("click", saveSettings);
     document.getElementById("settingProvider").addEventListener("change", handleProviderChange);
     document.getElementById("toggleKeyVisibility").addEventListener("click", toggleApiKeyVisibility);
+    const apiKeyInputEl = document.getElementById("settingApiKey");
+    if (apiKeyInputEl) {
+        apiKeyInputEl.addEventListener("input", () => {
+            const val = apiKeyInputEl.value.trim();
+            const provSelect = document.getElementById("settingProvider");
+            if (val.startsWith("gsk_") && provSelect.value !== "openai") {
+                provSelect.value = "openai";
+                handleProviderChange();
+            } else if (val.startsWith("AIza") && provSelect.value !== "gemini") {
+                provSelect.value = "gemini";
+                handleProviderChange();
+            } else if (val.startsWith("sk-ant-") && provSelect.value !== "claude") {
+                provSelect.value = "claude";
+                handleProviderChange();
+            }
+        });
+    }
     const togglePolKeyBtn = document.getElementById("togglePollinationsKeyVisibility");
     if (togglePolKeyBtn) {
         togglePolKeyBtn.addEventListener("click", togglePollinationsKeyVisibility);
@@ -281,6 +336,7 @@ function initWebSocket() {
         isConnected = true;
         connectionStatus.className = "status-indicator online";
         connectionText.textContent = "ออนไลน์ • เรียลไทม์";
+        startPingHeartbeat();
     };
 
     ws.onmessage = (event) => {
@@ -290,6 +346,7 @@ function initWebSocket() {
 
     ws.onclose = () => {
         isConnected = false;
+        clearInterval(pingHeartbeatInterval);
         connectionStatus.className = "status-indicator";
         connectionText.textContent = "การเชื่อมต่อหลุด - กำลังลองใหม่...";
         setTimeout(initWebSocket, 2500);
@@ -299,6 +356,33 @@ function initWebSocket() {
         console.error("WebSocket Error:", err);
     };
 }
+
+let pingHeartbeatInterval = null;
+function startPingHeartbeat() {
+    clearInterval(pingHeartbeatInterval);
+    pingHeartbeatInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "ping" }));
+        }
+    }, 15000);
+}
+
+// ตรวจจับเมื่อผู้ใช้สลับกลับมาที่หน้าจอมือถือ หรือเปิดหน้าจอขึ้นมาใหม่ ให้เชื่อมต่อทันที
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.log("[Mobile] Screen became active, reconnecting WebSocket...");
+            initWebSocket();
+        }
+    }
+});
+
+window.addEventListener("online", () => {
+    console.log("[Mobile] Network back online, reconnecting WebSocket...");
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        initWebSocket();
+    }
+});
 
 function handleServerEvent(data) {
     switch (data.type) {
@@ -356,25 +440,55 @@ function handleServerEvent(data) {
 
 // ==================== Message Rendering ====================
 
+// ==================== Message Rendering & Attachments ====================
+
 function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || !isConnected) return;
+    const hasImages = currentAttachments.images.length > 0;
+    const hasFolder = currentAttachments.folder !== null;
+    const hasFiles = currentAttachments.files.length > 0;
+
+    if (!text && !hasImages && !hasFolder && !hasFiles) return;
+    if (!isConnected) return;
 
     if (welcomeCard && welcomeCard.parentElement) {
         welcomeCard.style.display = "none";
     }
 
+    // Clone current attachments to send and display
+    const imagesToSend = [...currentAttachments.images];
+    const folderToSend = currentAttachments.folder;
+    const filesToSend = [...currentAttachments.files];
+
     // Render User Message Bubble
-    createUserMessageElement(text);
+    createUserMessageElement(text, imagesToSend, folderToSend, filesToSend);
     messageInput.value = "";
     messageInput.style.height = "auto";
+    clearAllAttachments();
     scrollToBottom();
+
+    // Prepare payload
+    const imagesPayload = imagesToSend.map(img => ({
+        name: img.name,
+        mime_type: img.mime_type,
+        data: img.data
+    }));
+
+    const attachmentsPayload = [];
+    if (folderToSend) {
+        attachmentsPayload.push(folderToSend);
+    }
+    if (filesToSend.length) {
+        filesToSend.forEach(f => attachmentsPayload.push(f));
+    }
 
     // Send through WebSocket
     ws.send(JSON.stringify({
         type: "message",
         content: text,
-        session_id: "default"
+        session_id: "default",
+        images: imagesPayload,
+        attachments: attachmentsPayload
     }));
 }
 
@@ -383,13 +497,406 @@ function quickSend(text) {
     sendMessage();
 }
 
-function createUserMessageElement(text) {
+function createUserMessageElement(text, images = [], folder = null, files = []) {
     const row = document.createElement("div");
     row.className = "message-row user";
+
+    let attachmentsHtml = "";
+
+    // 1. Attached Images Grid
+    if (images && images.length > 0) {
+        attachmentsHtml += `<div class="msg-attached-images-grid">`;
+        images.forEach(img => {
+            attachmentsHtml += `
+                <div class="msg-attached-image-card" onclick="window.openImageLightbox('${img.preview}', '${escapeHtml(img.name)}')">
+                    <img src="${img.preview}" alt="${escapeHtml(img.name)}" title="คลิกเพื่อดูรูปภาพขนาดเต็ม">
+                </div>
+            `;
+        });
+        attachmentsHtml += `</div>`;
+    }
+
+    // 2. Attached Folder Card
+    if (folder) {
+        const treeEscaped = encodeURIComponent(folder.tree || "");
+        attachmentsHtml += `
+            <div class="msg-attached-folder-card">
+                <i class="fa-solid fa-folder-open folder-icon-glow"></i>
+                <div class="folder-details">
+                    <div class="folder-title">📁 ${escapeHtml(folder.name)}</div>
+                    <div class="folder-sub">${folder.fileCount} ไฟล์โค้ด • ${folder.totalSizeStr}</div>
+                </div>
+                <button type="button" class="view-tree-btn" onclick="window.viewFolderTreeModalFromChat('${escapeHtml(folder.name)}', '${folder.fileCount} ไฟล์ (${folder.totalSizeStr})', '${treeEscaped}')">
+                    <i class="fa-solid fa-folder-tree"></i> ดูโครงสร้าง
+                </button>
+            </div>
+        `;
+    }
+
+    // 3. Attached Single Files
+    if (files && files.length > 0) {
+        files.forEach(f => {
+            attachmentsHtml += `
+                <div class="msg-attached-folder-card" style="border-color: rgba(96, 165, 250, 0.3);">
+                    <i class="fa-solid fa-file-code folder-icon-glow" style="color: #60a5fa;"></i>
+                    <div class="folder-details">
+                        <div class="folder-title">📄 ${escapeHtml(f.name)}</div>
+                        <div class="folder-sub">${f.sizeStr}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    let messageTextHtml = "";
+    if (text) {
+        messageTextHtml = `<div>${escapeHtml(text)}</div>`;
+    }
+
     row.innerHTML = `
-        <div class="message-bubble">${escapeHtml(text)}</div>
+        <div class="message-bubble">
+            ${attachmentsHtml ? `<div class="msg-attachments-wrap">${attachmentsHtml}</div>` : ""}
+            ${messageTextHtml}
+        </div>
     `;
     messagesContainer.appendChild(row);
+}
+
+// ==================== Attachment Helpers & Management ====================
+
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+    });
+}
+
+function compressImage(file, maxWidth = 1280, maxHeight = 1280, quality = 0.85) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxWidth || height > maxHeight) {
+                    if (width / height > maxWidth / maxHeight) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, width, height);
+                const mime = file.type === "image/png" ? "image/png" : "image/jpeg";
+                const dataUrl = canvas.toDataURL(mime, quality);
+                const base64 = dataUrl.split(",")[1];
+                resolve({
+                    id: "img_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+                    name: file.name,
+                    mime_type: mime,
+                    data: base64,
+                    preview: dataUrl,
+                    sizeStr: formatBytes(Math.round((dataUrl.length * 3) / 4))
+                });
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleImageFileSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const compressed = await compressImage(file);
+        currentAttachments.images.push(compressed);
+    }
+    e.target.value = "";
+    renderAttachmentTray();
+}
+
+async function handleFolderFileSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    await processFolderFiles(files);
+    e.target.value = "";
+}
+
+async function processFolderFiles(filesArray) {
+    if (!filesArray.length) return;
+
+    const firstRel = filesArray[0].webkitRelativePath || filesArray[0].name;
+    const folderName = firstRel.includes("/") ? firstRel.split("/")[0] : "project";
+
+    const IGNORED_PARTS = [
+        "node_modules", ".git", ".venv", "venv", "__pycache__",
+        "dist", "build", ".next", ".nuxt", ".idea", ".vscode", "coverage"
+    ];
+    const BINARY_EXTS = [
+        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".exe", ".dll",
+        ".zip", ".tar", ".gz", ".7z", ".rar", ".mp3", ".mp4", ".mov",
+        ".woff", ".woff2", ".ttf", ".eot", ".pyc", ".pdf", ".bin"
+    ];
+
+    const validFiles = [];
+    let totalSize = 0;
+    const MAX_SINGLE_FILE_SIZE = 120 * 1024;
+    const MAX_TOTAL_FILES = 40;
+    const MAX_TOTAL_SIZE = 2 * 1024 * 1024;
+
+    for (const file of filesArray) {
+        const relPath = file.webkitRelativePath || file.name;
+        const pathLower = relPath.toLowerCase();
+
+        const isIgnored = IGNORED_PARTS.some(p => pathLower.includes(`/${p}/`) || pathLower.startsWith(`${p}/`));
+        if (isIgnored) continue;
+
+        const isBinary = BINARY_EXTS.some(ext => pathLower.endsWith(ext));
+        if (isBinary) continue;
+
+        if (file.size > MAX_SINGLE_FILE_SIZE) continue;
+        if (totalSize + file.size > MAX_TOTAL_SIZE || validFiles.length >= MAX_TOTAL_FILES) continue;
+
+        try {
+            const content = await readFileAsText(file);
+            validFiles.push({
+                path: relPath,
+                name: file.name,
+                size: file.size,
+                sizeStr: formatBytes(file.size),
+                content: content
+            });
+            totalSize += file.size;
+        } catch (err) {
+            console.warn("Could not read file:", relPath, err);
+        }
+    }
+
+    const tree = validFiles.map(f => "├── " + f.path).join("\n");
+
+    currentAttachments.folder = {
+        type: "folder",
+        name: folderName,
+        fileCount: validFiles.length,
+        totalSize: totalSize,
+        totalSizeStr: formatBytes(totalSize),
+        tree: tree,
+        files: validFiles
+    };
+
+    renderAttachmentTray();
+}
+
+function renderAttachmentTray() {
+    if (!attachmentTray || !trayItemsContainer) return;
+
+    const totalCount = currentAttachments.images.length + 
+                       (currentAttachments.folder ? 1 : 0) + 
+                       currentAttachments.files.length;
+
+    if (totalCount === 0) {
+        attachmentTray.style.display = "none";
+        trayItemsContainer.innerHTML = "";
+        return;
+    }
+
+    attachmentTray.style.display = "block";
+    if (attachmentCountEl) attachmentCountEl.textContent = totalCount;
+    trayItemsContainer.innerHTML = "";
+
+    // 1. Render Images
+    currentAttachments.images.forEach(img => {
+        const item = document.createElement("div");
+        item.className = "tray-item image-item";
+        item.innerHTML = `
+            <img src="${img.preview}" class="tray-thumb-img" alt="${escapeHtml(img.name)}">
+            <div class="tray-item-info">
+                <span class="tray-item-name" title="${escapeHtml(img.name)}">${escapeHtml(img.name)}</span>
+                <span class="tray-item-meta">${img.sizeStr}</span>
+            </div>
+            <button type="button" class="tray-item-btn remove-btn" onclick="removeAttachmentItem('image', '${img.id}')" title="ลบออก">&times;</button>
+        `;
+        trayItemsContainer.appendChild(item);
+    });
+
+    // 2. Render Folder
+    if (currentAttachments.folder) {
+        const f = currentAttachments.folder;
+        const item = document.createElement("div");
+        item.className = "tray-item folder-item";
+        item.innerHTML = `
+            <div class="tray-icon-box folder"><i class="fa-solid fa-folder-open"></i></div>
+            <div class="tray-item-info">
+                <span class="tray-item-name" title="${escapeHtml(f.name)}">📁 ${escapeHtml(f.name)}</span>
+                <span class="tray-item-meta">${f.fileCount} ไฟล์ • ${f.totalSizeStr}</span>
+            </div>
+            <button type="button" class="tray-item-btn" onclick="openFolderTreeModal('${escapeHtml(f.name)}', '${f.fileCount} ไฟล์ (${f.totalSizeStr})', '${encodeURIComponent(f.tree)}')" title="ดูโครงสร้างไฟล์"><i class="fa-solid fa-list-check"></i></button>
+            <button type="button" class="tray-item-btn remove-btn" onclick="removeAttachmentItem('folder')" title="ลบออก">&times;</button>
+        `;
+        trayItemsContainer.appendChild(item);
+    }
+
+    // 3. Render Files
+    currentAttachments.files.forEach(file => {
+        const item = document.createElement("div");
+        item.className = "tray-item file-item";
+        item.innerHTML = `
+            <div class="tray-icon-box file"><i class="fa-solid fa-file-code"></i></div>
+            <div class="tray-item-info">
+                <span class="tray-item-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                <span class="tray-item-meta">${file.sizeStr}</span>
+            </div>
+            <button type="button" class="tray-item-btn remove-btn" onclick="removeAttachmentItem('file', '${file.id}')" title="ลบออก">&times;</button>
+        `;
+        trayItemsContainer.appendChild(item);
+    });
+}
+
+function removeAttachmentItem(type, id) {
+    if (type === "image") {
+        currentAttachments.images = currentAttachments.images.filter(img => img.id !== id);
+    } else if (type === "folder") {
+        currentAttachments.folder = null;
+    } else if (type === "file") {
+        currentAttachments.files = currentAttachments.files.filter(f => f.id !== id);
+    }
+    renderAttachmentTray();
+}
+
+function clearAllAttachments() {
+    currentAttachments.images = [];
+    currentAttachments.folder = null;
+    currentAttachments.files = [];
+    renderAttachmentTray();
+}
+
+function openFolderTreeModal(title, subtitle, encodedTree) {
+    if (!folderTreeModal) return;
+    const tree = decodeURIComponent(encodedTree || "");
+    if (folderModalTitle) folderModalTitle.textContent = title || "โครงสร้างไฟล์";
+    if (folderModalSubtitle) folderModalSubtitle.textContent = subtitle || "";
+    if (folderModalTree) folderModalTree.textContent = tree || "(ไม่มีรายการไฟล์)";
+    folderTreeModal.classList.add("active");
+}
+
+function closeFolderTreeModal() {
+    if (folderTreeModal) folderTreeModal.classList.remove("active");
+}
+
+window.viewFolderTreeModalFromChat = function(name, subtitle, encodedTree) {
+    openFolderTreeModal(name, subtitle, encodedTree);
+};
+
+// Clipboard Paste Support (Ctrl+V)
+function handlePasteEvent(e) {
+    const clipboardData = e.clipboardData || window.clipboardData;
+    if (!clipboardData || !clipboardData.items) return;
+    const items = clipboardData.items;
+    for (const item of items) {
+        if (item.type.indexOf("image") !== -1) {
+            const file = item.getAsFile();
+            if (file) {
+                compressImage(file).then(compressed => {
+                    currentAttachments.images.push(compressed);
+                    renderAttachmentTray();
+                });
+            }
+        }
+    }
+}
+
+// Drag & Drop Support
+function initDragAndDrop() {
+    let dragCounter = 0;
+
+    window.addEventListener("dragenter", (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragDropOverlay) dragDropOverlay.classList.add("active");
+    });
+
+    window.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0 && dragDropOverlay) {
+            dragCounter = 0;
+            dragDropOverlay.classList.remove("active");
+        }
+    });
+
+    window.addEventListener("dragover", (e) => {
+        e.preventDefault();
+    });
+
+    window.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        if (dragDropOverlay) dragDropOverlay.classList.remove("active");
+
+        const items = e.dataTransfer.items;
+        const files = Array.from(e.dataTransfer.files || []);
+
+        if (items && items.length) {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.webkitGetAsEntry) {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry && entry.isDirectory) {
+                        const allFiles = await readEntryDirectory(entry);
+                        await processFolderFiles(allFiles);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        for (const file of files) {
+            if (file.type.startsWith("image/")) {
+                const compressed = await compressImage(file);
+                currentAttachments.images.push(compressed);
+            }
+        }
+        renderAttachmentTray();
+    });
+}
+
+function readEntryDirectory(dirEntry) {
+    return new Promise((resolve) => {
+        const dirReader = dirEntry.createReader();
+        const entries = [];
+        const readEntries = () => {
+            dirReader.readEntries(async (result) => {
+                if (!result.length) {
+                    const filePromises = entries.map(e => new Promise(res => e.file(res)));
+                    const files = await Promise.all(filePromises);
+                    resolve(files);
+                } else {
+                    for (const entry of result) {
+                        if (entry.isFile) entries.push(entry);
+                    }
+                    readEntries();
+                }
+            });
+        };
+        readEntries();
+    });
 }
 
 function createBotMessageElement() {
@@ -852,6 +1359,20 @@ function stopCallTimer() {
 }
 
 function startVoiceCall() {
+    if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+        const proceed = confirm(
+            "⚠️ การเปิดไมโครโฟนบนมือถือต้องการการเชื่อมต่อแบบปลอดภัย (Secure Context)\n\n" +
+            "หากไมค์ไม่ทำงาน แนะนำให้:\n" +
+            "1. เปิดผ่าน HTTPS (:8443) หรือ\n" +
+            "2. บน Chrome Android ให้ไปที่ chrome://flags แล้วเปิด 'Insecure origins treated as secure'\n\n" +
+            "ต้องการเปิดหน้าจอ QR Code และวิธีเปิดไมค์สำหรับมือถือหรือไม่?"
+        );
+        if (proceed) {
+            openMobileConnectModal();
+            return;
+        }
+    }
+
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
         alert("เบราว์เซอร์ของคุณยังไม่รองรับ Speech Recognition แนะนำให้ใช้ Google Chrome หรือ Microsoft Edge ค่ะ");
@@ -1152,12 +1673,43 @@ async function fetchSettings() {
         document.getElementById("settingModel").value = data.model_name;
         document.getElementById("settingBaseUrl").value = data.openai_base_url;
         document.getElementById("settingPersona").value = data.custom_persona || "";
+        // Update API Sync card and device sharing badges
+        const syncCard = document.getElementById("apiSyncCard");
+        const syncTag = document.getElementById("syncStatusTag");
+        const syncDesc = document.getElementById("syncStatusDesc");
+        const apiKeyBadge = document.getElementById("apiKeyActiveBadge");
+        const apiKeyActiveText = document.getElementById("apiKeyActiveText");
+
         if (data.has_api_key) {
-            document.getElementById("settingApiKey").placeholder = `ตั้งค่าแล้ว (${data.masked_api_key})`;
+            document.getElementById("settingApiKey").placeholder = `ใส่คีย์ใหม่เมื่อต้องการเปลี่ยน (ปัจจุบัน: ${data.masked_api_key})`;
+            if (apiKeyBadge && apiKeyActiveText) {
+                apiKeyBadge.style.display = "flex";
+                apiKeyActiveText.innerHTML = `<strong>คีย์หลัก:</strong> ${data.masked_api_key} • บันทึกใน .env และซิงค์กับมือถือเรียบร้อย ✓`;
+            }
+            if (syncCard) {
+                syncCard.className = "api-sync-card";
+                if (syncTag) syncTag.textContent = "ใช้งานได้ทุกอุปกรณ์ ✓";
+                if (syncDesc) syncDesc.innerHTML = `API Key ถูกบันทึกไว้ในระบบและไฟล์ <code>.env</code> ถาวรแล้ว • มือถือและทุกเครื่องที่เชื่อมต่อจะใช้คีย์นี้อัตโนมัติ ไม่ต้องกรอกซ้ำ`;
+            }
+        } else {
+            document.getElementById("settingApiKey").placeholder = "ใส่ API Key เพื่อเริ่มใช้งาน";
+            if (apiKeyBadge) apiKeyBadge.style.display = "none";
+            if (syncCard) {
+                syncCard.className = "api-sync-card warning";
+                if (syncTag) syncTag.textContent = "ยังไม่ได้ระบุ Key";
+                if (syncDesc) syncDesc.innerHTML = `ยังไม่มี API Key ในระบบ กรุณาใส่คีย์ด้านล่างแล้วกดบันทึก ระบบจะบันทึกถาวรและซิงค์ให้มือถือใช้ทันที`;
+            }
         }
+
         if (data.has_pollinations_key) {
             const polInput = document.getElementById("settingPollinationsKey");
-            if (polInput) polInput.placeholder = `ตั้งค่าแล้ว (${data.masked_pollinations_key})`;
+            if (polInput) polInput.placeholder = `ใส่คีย์ใหม่เมื่อต้องการเปลี่ยน (ปัจจุบัน: ${data.masked_pollinations_key})`;
+            const polBadge = document.getElementById("pollinationsKeyActiveBadge");
+            const polActiveText = document.getElementById("pollinationsKeyActiveText");
+            if (polBadge && polActiveText) {
+                polBadge.style.display = "flex";
+                polActiveText.innerHTML = `<strong>Key วาดภาพ:</strong> ${data.masked_pollinations_key} • ซิงค์กับมือถือเรียบร้อย ✓`;
+            }
         }
         if (data.obsidian_vault_path) {
             const obsPathInput = document.getElementById("settingObsidianPath");
@@ -1225,14 +1777,14 @@ function handleProviderChange() {
         modelGroup.style.display = "flex";
         baseUrlGroup.style.display = "flex";
         const currentModel = document.getElementById("settingModel").value;
-        if (!currentModel || currentModel.includes("gemini") || currentModel.includes("claude") || currentModel.includes("qwen") || currentModel.includes("moonshot") || currentModel.includes("llama-3.3") || currentModel.includes("deepseek-r1-distill-llama")) {
-            document.getElementById("settingModel").value = "llama-3.1-8b-instant";
+        if (!currentModel || currentModel.includes("gemini") || currentModel.includes("claude") || currentModel.includes("llama-3.1") || currentModel.includes("llama-3.3") || currentModel.includes("deepseek-r1-distill-llama")) {
+            document.getElementById("settingModel").value = "qwen/qwen3.8-27b";
         }
         const currentUrl = document.getElementById("settingBaseUrl").value;
         if (!currentUrl || currentUrl.includes("api.openai.com")) {
             document.getElementById("settingBaseUrl").value = "https://api.groq.com/openai/v1";
         }
-        if (helperText) helperText.innerHTML = 'รับ Groq API Key ฟรีที่: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">Groq Console</a> หรือ <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">OpenAI Platform</a>';
+        if (helperText) helperText.innerHTML = 'รับ Groq API Key ฟรีที่: <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">Groq Console</a> (แนะนำโมเดล <code>qwen/qwen3.8-27b</code> เร็วและเก่งภาษาไทย)';
     } else if (provider === "claude") {
         apiKeyGroup.style.display = "flex";
         modelGroup.style.display = "flex";
@@ -1287,8 +1839,13 @@ async function saveSettings() {
     const polKeyInput = document.getElementById("settingPollinationsKey");
     const polKey = polKeyInput ? polKeyInput.value.trim() : "";
 
+    let finalProvider = provider;
+    if (apiKey.startsWith("gsk_")) finalProvider = "openai";
+    else if (apiKey.startsWith("AIza")) finalProvider = "gemini";
+    else if (apiKey.startsWith("sk-ant-")) finalProvider = "claude";
+
     const payload = {
-        api_provider: provider,
+        api_provider: finalProvider,
         model_name: model,
         openai_base_url: baseUrl,
         custom_persona: persona
@@ -1361,3 +1918,609 @@ async function pushGithubNow() {
         btn.innerHTML = originalHtml;
     }
 }
+
+// ========================================================
+// Video Editing Studio (CapCut PC & Adobe Premiere Pro)
+// ========================================================
+
+const videoStudioModal = document.getElementById("videoStudioModal");
+let studioScenes = [
+    {
+        title: "Hook (ดึงดูดสายตา)",
+        duration: 3.5,
+        text: "สวัสดีครับทุกคน วันนี้ Friday มีทริคเด็ดๆ มาแชร์กันครับ!",
+        visual_idea: "ภาพเปิดมุมมองกว้าง Zoom เข้าเร็วๆ สไตล์ Viral Short"
+    },
+    {
+        title: "Main Content (จุดสำคัญ)",
+        duration: 4.5,
+        text: "เทคนิคง่ายๆ ที่ทำให้การทำงานเร็วขึ้นถึง 10 เท่า",
+        visual_idea: "โคลสอัปขั้นตอนทำทีละสเต็ป พร้อมไฮไลท์ตัวหนังสือ"
+    },
+    {
+        title: "Call To Action (ปิดท้าย)",
+        duration: 3.5,
+        text: "อย่าลืมกดติดตามและกดหัวใจเพื่อไม่พลาดคลิปถัดไปนะครับ!",
+        visual_idea: "ปุ่ม Follow ดุ๊กดิ๊ก และลูกศรชี้โปรไฟล์"
+    }
+];
+
+let cachedVideoStatus = null;
+let cachedLocalProjects = { capcut_drafts: [], premiere_projects: [] };
+
+function openVideoStudioModal() {
+    if (videoStudioModal) {
+        videoStudioModal.classList.add("active");
+        renderStudioScenes();
+        loadVideoStatusAndDrafts();
+    }
+}
+
+function closeVideoStudioModal() {
+    if (videoStudioModal) {
+        videoStudioModal.classList.remove("active");
+    }
+}
+
+function switchVideoTab(tabName) {
+    document.querySelectorAll(".video-tab-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-tab") === tabName);
+    });
+    document.querySelectorAll(".video-tab-content").forEach(content => {
+        content.classList.toggle("active", content.id === `tabContent_${tabName}`);
+    });
+    if (tabName === "local") {
+        loadVideoStatusAndDrafts();
+    }
+}
+
+async function loadVideoStatusAndDrafts() {
+    try {
+        const [statusRes, draftsRes] = await Promise.all([
+            fetch("/api/video/status"),
+            fetch("/api/video/drafts")
+        ]);
+        const statusData = await statusRes.json();
+        const draftsData = await draftsRes.json();
+
+        cachedVideoStatus = statusData;
+        cachedLocalProjects = draftsData;
+
+        // อัปเดตสถานะ CapCut
+        const capcutStatusText = document.getElementById("capcutStatusText");
+        if (capcutStatusText && statusData.environment && statusData.environment.capcut) {
+            const cc = statusData.environment.capcut;
+            if (cc.direct_sync_supported) {
+                capcutStatusText.innerHTML = `<span style="color:#22d3ee">พร้อมซิงค์ (${statusData.capcut_draft_count} โปรเจกต์)</span>`;
+            } else if (cc.installed) {
+                capcutStatusText.innerHTML = `<span style="color:#22d3ee">ติดตั้งแล้ว</span>`;
+            } else {
+                capcutStatusText.innerHTML = `<span style="color:#94a3b8">ไม่พบในเครื่อง</span>`;
+            }
+        }
+
+        // อัปเดตสถานะ Premiere Pro
+        const premiereStatusText = document.getElementById("premiereStatusText");
+        if (premiereStatusText && statusData.environment && statusData.environment.premiere) {
+            const pr = statusData.environment.premiere;
+            if (pr.installed) {
+                premiereStatusText.innerHTML = `<span style="color:#c084fc">พร้อมใช้งาน (XML / JSX / SRT)</span>`;
+            } else {
+                premiereStatusText.innerHTML = `<span style="color:#38bdf8">พร้อมส่งออกไฟล์ XML / JSX</span>`;
+            }
+        }
+
+        // อัปเดตสถานะ Alight Motion
+        const alightStatusText = document.getElementById("alightStatusText");
+        if (alightStatusText) {
+            const amCount = statusData.alightmotion_count || (draftsData.alightmotion_projects ? draftsData.alightmotion_projects.length : 0);
+            alightStatusText.innerHTML = `<span style="color:#fbbf24">พร้อมส่งออก XML (${amCount} โปรเจกต์)</span>`;
+        }
+
+        // อัปเดตจำนวนโปรเจกต์ทั้งหมด
+        const localProjectsCount = document.getElementById("localProjectsCount");
+        if (localProjectsCount) {
+            const totalCount = (draftsData.capcut_drafts?.length || 0) + 
+                               (draftsData.premiere_projects?.length || 0) + 
+                               (draftsData.alightmotion_projects?.length || 0);
+            localProjectsCount.textContent = totalCount;
+        }
+
+        renderLocalProjectsList();
+    } catch (e) {
+        console.error("Error loading video status:", e);
+    }
+}
+
+function renderStudioScenes() {
+    const container = document.getElementById("studioScenesList");
+    const durBadge = document.getElementById("totalDurationBadge");
+    if (!container) return;
+
+    let totalDur = 0;
+    container.innerHTML = "";
+
+    studioScenes.forEach((scene, idx) => {
+        const dur = parseFloat(scene.duration) || 3.0;
+        totalDur += dur;
+
+        const card = document.createElement("div");
+        card.className = "scene-card-item";
+        card.innerHTML = `
+            <div class="scene-card-top">
+                <div class="scene-number-title">
+                    <span class="scene-num-badge">${idx + 1}</span>
+                    <input type="text" class="scene-title-input" value="${escapeHtml(scene.title || `ฉากที่ ${idx+1}`)}" onchange="updateSceneField(${idx}, 'title', this.value)">
+                </div>
+                <div class="scene-controls">
+                    <div class="scene-dur-wrap">
+                        <i class="fa-solid fa-clock"></i>
+                        <input type="number" step="0.5" min="1" max="120" class="scene-dur-input" value="${dur}" onchange="updateSceneField(${idx}, 'duration', parseFloat(this.value))"> วินาที
+                    </div>
+                    <button type="button" class="scene-btn-icon listen-btn" title="ฟังเสียงพากย์ฉากนี้" onclick="previewSceneTts(${idx})">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <button type="button" class="scene-btn-icon" title="ลบฉากนี้" onclick="deleteScene(${idx})">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <textarea class="scene-text-input" placeholder="สคริปต์เสียงพากย์และซับไตเติลของฉากนี้..." onchange="updateSceneField(${idx}, 'text', this.value)">${escapeHtml(scene.text || '')}</textarea>
+            <input type="text" class="scene-visual-input" placeholder="💡 คำแนะนำภาพ/B-Roll (เช่น ภาพมือถือ, กล่องพัสดุ, เอฟเฟกต์ซูม)..." value="${escapeHtml(scene.visual_idea || '')}" onchange="updateSceneField(${idx}, 'visual_idea', this.value)">
+        `;
+        container.appendChild(card);
+    });
+
+    if (durBadge) {
+        durBadge.textContent = `ความยาวรวม: ~${totalDur.toFixed(1)} วินาที`;
+    }
+}
+
+function updateSceneField(idx, field, value) {
+    if (studioScenes[idx]) {
+        studioScenes[idx][field] = value;
+        if (field === "duration") {
+            const durBadge = document.getElementById("totalDurationBadge");
+            const totalDur = studioScenes.reduce((sum, s) => sum + (parseFloat(s.duration) || 0), 0);
+            if (durBadge) durBadge.textContent = `ความยาวรวม: ~${totalDur.toFixed(1)} วินาที`;
+        }
+    }
+}
+
+function addNewScene() {
+    studioScenes.push({
+        title: `ฉากที่ ${studioScenes.length + 1}`,
+        duration: 4.0,
+        text: "พิมพ์ข้อความเสียงพากย์ของฉากนี้...",
+        visual_idea: "ภาพประกอบที่สอดคล้องกับเนื้อหา"
+    });
+    renderStudioScenes();
+}
+
+function deleteScene(idx) {
+    if (studioScenes.length <= 1) {
+        alert("ต้องมีอย่างน้อย 1 ฉากในโปรเจกต์ค่ะ");
+        return;
+    }
+    studioScenes.splice(idx, 1);
+    renderStudioScenes();
+}
+
+async function previewSceneTts(idx) {
+    const scene = studioScenes[idx];
+    if (!scene || !scene.text.trim()) {
+        alert("กรุณาใส่ข้อความสคริปต์ก่อนทดลองฟังเสียงค่ะ");
+        return;
+    }
+    playAudioMessage(scene.text);
+}
+
+async function generateAiStoryboard() {
+    const promptInput = document.getElementById("studioTopicPrompt");
+    const prompt = promptInput?.value.trim();
+    if (!prompt) {
+        alert("กรุณาพิมพ์หัวข้อหรือไอเดียคลิปก่อนนะคะ");
+        return;
+    }
+
+    const btn = document.getElementById("btnStudioAiPlan");
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังคิด...';
+    btn.disabled = true;
+
+    try {
+        const aspect = document.getElementById("studioAspectRatio")?.value || "9:16";
+        const res = await fetch("/api/video/plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: prompt, aspect_ratio: aspect })
+        });
+        const data = await res.json();
+        if (data.scenes && data.scenes.length > 0) {
+            studioScenes = data.scenes;
+            const nameInput = document.getElementById("studioProjectName");
+            if (nameInput && data.title) {
+                nameInput.value = data.title.replace(/\s+/g, '_');
+            }
+            renderStudioScenes();
+        }
+    } catch (e) {
+        alert("เกิดข้อผิดพลาดในการวางโครงเรื่อง: " + e.message);
+    } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    }
+}
+
+async function executeExportProject(platform) {
+    const projectName = document.getElementById("studioProjectName")?.value.trim() || `Friday_${Date.now()}`;
+    const aspect = document.getElementById("studioAspectRatio")?.value || "9:16";
+    const voice = document.getElementById("studioVoiceSelect")?.value || "th-TH-PremwadeeNeural";
+
+    const btnCapCut = document.getElementById("btnBuildCapCut");
+    const btnPrem = document.getElementById("btnBuildPremiere");
+    const btnAlight = document.getElementById("btnBuildAlight");
+    const btnBoth = document.getElementById("btnBuildBoth");
+
+    const loadingText = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังประมวลผล...';
+    if (platform === "capcut" && btnCapCut) btnCapCut.innerHTML = loadingText;
+    if (platform === "premiere" && btnPrem) btnPrem.innerHTML = loadingText;
+    if (platform === "alightmotion" && btnAlight) btnAlight.innerHTML = loadingText;
+    if ((platform === "both" || platform === "all") && btnBoth) btnBoth.innerHTML = loadingText;
+
+    try {
+        const payload = {
+            platform: platform,
+            project_name: projectName,
+            aspect_ratio: aspect,
+            scenes: studioScenes,
+            generate_voiceover: true,
+            voice: voice
+        };
+
+        const res = await fetch("/api/video/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.status === "success") {
+            let msg = `🎉 สร้างโปรเจกต์ "${projectName}" สำเร็จเรียบร้อยแล้วค่ะ!\n\n`;
+            if (result.results?.capcut?.status === "success") {
+                msg += `✂️ CapCut PC:\n- บันทึกลง Drafts ในเครื่องแล้ว\n- ที่อยู่: ${result.results.capcut.project_folder}\n- เปิดแอป CapCut จะพบโปรเจกต์นี้ทันที!\n\n`;
+            }
+            if (result.results?.premiere?.status === "success") {
+                msg += `🎞️ Adobe Premiere Pro:\n- สร้างไฟล์ .xml, .jsx, .srt เรียบร้อย\n- ที่อยู่: ${result.results.premiere.export_folder}\n- นำเข้า .xml เข้า Premiere Pro ได้ทันที!\n\n`;
+            }
+            if (result.results?.alightmotion?.status === "success") {
+                msg += `📱 Alight Motion:\n- สร้างไฟล์ XML Package เรียบร้อย\n- ที่อยู่: ${result.results.alightmotion.project_folder}\n- สามารถกดดาวน์โหลดไฟล์ .xml ได้จากแท็บ "โปรเจกต์ในเครื่อง" เพื่อแชร์เข้าแอปในมือถือได้ทันทีค่ะ!`;
+            }
+
+            alert(msg);
+            loadVideoStatusAndDrafts();
+        } else {
+            alert("⚠️ เกิดข้อผิดพลาดในการสร้างโปรเจกต์: " + JSON.stringify(result));
+        }
+    } catch (e) {
+        alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + e.message);
+    } finally {
+        if (btnCapCut) btnCapCut.innerHTML = '<i class="fa-solid fa-scissors"></i> บันทึกลง CapCut PC ทันที';
+        if (btnPrem) btnPrem.innerHTML = '<i class="fa-solid fa-film"></i> ส่งออก Premiere Pro (.xml + .jsx)';
+        if (btnAlight) btnAlight.innerHTML = '<i class="fa-solid fa-play"></i> ส่งออก Alight Motion (.xml)';
+        if (btnBoth) btnBoth.innerHTML = '<i class="fa-solid fa-bolt"></i> ส่งออกครบทุกแอป';
+    }
+}
+
+function renderLocalProjectsList() {
+    const ccContainer = document.getElementById("capcutProjectsList");
+    const prContainer = document.getElementById("premiereProjectsList");
+    const amContainer = document.getElementById("alightProjectsList");
+    const ccCount = document.getElementById("capcutCountLabel");
+    const prCount = document.getElementById("premiereCountLabel");
+    const amCount = document.getElementById("alightCountLabel");
+
+    if (ccContainer && cachedLocalProjects.capcut_drafts) {
+        const drafts = cachedLocalProjects.capcut_drafts;
+        if (ccCount) ccCount.textContent = drafts.length;
+        if (drafts.length === 0) {
+            ccContainer.innerHTML = '<div style="color:#94a3b8; font-size:0.85rem; padding:10px; text-align:center;">ไม่พบโปรเจกต์ในเครื่อง</div>';
+        } else {
+            ccContainer.innerHTML = drafts.map(d => `
+                <div class="local-project-item">
+                    <div class="item-meta">
+                        <div class="item-name" title="${escapeHtml(d.name)}">✂️ ${escapeHtml(d.name)}</div>
+                        <div class="item-sub">⏱️ ${d.duration_sec}s • 📅 ${d.created || 'ไม่ระบุ'}</div>
+                    </div>
+                    <div class="item-actions">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openFolderDirect('${escapePath(d.path)}')" title="เปิดโฟลเดอร์"><i class="fa-solid fa-folder"></i></button>
+                    </div>
+                </div>
+            `).join("");
+        }
+    }
+
+    if (prContainer && cachedLocalProjects.premiere_projects) {
+        const projs = cachedLocalProjects.premiere_projects;
+        if (prCount) prCount.textContent = projs.length;
+        if (projs.length === 0) {
+            prContainer.innerHTML = '<div style="color:#94a3b8; font-size:0.85rem; padding:10px; text-align:center;">ยังไม่มีโปรเจกต์ Premiere ที่ส่งออก</div>';
+        } else {
+            prContainer.innerHTML = projs.map(p => `
+                <div class="local-project-item">
+                    <div class="item-meta">
+                        <div class="item-name" title="${escapeHtml(p.name)}">🎞️ ${escapeHtml(p.name)}</div>
+                        <div class="item-sub">📅 ${p.created} • XML & SRT Ready</div>
+                    </div>
+                    <div class="item-actions">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openFolderDirect('${escapePath(p.path)}')" title="เปิดโฟลเดอร์"><i class="fa-solid fa-folder"></i></button>
+                    </div>
+                </div>
+            `).join("");
+        }
+    }
+
+    if (amContainer && cachedLocalProjects.alightmotion_projects) {
+        const amProjs = cachedLocalProjects.alightmotion_projects;
+        if (amCount) amCount.textContent = amProjs.length;
+        if (amProjs.length === 0) {
+            amContainer.innerHTML = '<div style="color:#94a3b8; font-size:0.85rem; padding:10px; text-align:center;">ยังไม่มีโปรเจกต์ Alight Motion XML</div>';
+        } else {
+            amContainer.innerHTML = amProjs.map(p => `
+                <div class="local-project-item">
+                    <div class="item-meta">
+                        <div class="item-name" title="${escapeHtml(p.name)}">📱 ${escapeHtml(p.name)}</div>
+                        <div class="item-sub">📅 ${p.created} • XML Package</div>
+                    </div>
+                    <div class="item-actions">
+                        <a href="${p.download_url}" download class="btn-download-xml" title="ดาวน์โหลดไฟล์ .xml สำหรับนำเข้า Alight Motion">
+                            <i class="fa-solid fa-download"></i> ดาวน์โหลด XML
+                        </a>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openFolderDirect('${escapePath(p.path)}')" title="เปิดโฟลเดอร์">
+                            <i class="fa-solid fa-folder"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join("");
+        }
+    }
+}
+
+function escapePath(p) {
+    if (!p) return "";
+    return p.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function openFolderDirect(targetPath) {
+    try {
+        await fetch("/api/video/open", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "folder", target_path: targetPath })
+        });
+    } catch (e) {
+        console.error("Open folder error:", e);
+    }
+}
+
+async function openCapCutApp() {
+    try {
+        const res = await fetch("/api/video/open", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "capcut" })
+        });
+        const data = await res.json();
+        alert(data.message);
+    } catch (e) {
+        alert("ไม่สามารถเปิด CapCut ได้: " + e.message);
+    }
+}
+
+async function openPremiereApp() {
+    try {
+        const res = await fetch("/api/video/open", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "premiere" })
+        });
+        const data = await res.json();
+        alert(data.message);
+    } catch (e) {
+        alert("ไม่สามารถเปิด Premiere Pro ได้: " + e.message);
+    }
+}
+
+// Window global functions for chat inline cards
+window.createVideoProjectFromChat = async function(platform, planData) {
+    let plan = planData;
+    if (typeof planData === "string") {
+        try { plan = JSON.parse(planData); } catch(e) {}
+    }
+    if (!plan || !plan.scenes) return;
+
+    const projectName = (plan.title || "Friday_Project").replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, "_");
+    const aspect = plan.aspect_ratio || "9:16";
+
+    const platformLabel = platform === 'capcut' ? 'CapCut PC' : (platform === 'premiere' ? 'Adobe Premiere Pro' : 'Alight Motion (.xml)');
+    const confirmed = confirm(`🎬 คุณต้องการสร้างโปรเจกต์ "${projectName}" สำหรับ ${platformLabel} ทันทีใช่หรือไม่?`);
+    if (!confirmed) return;
+
+    try {
+        const payload = {
+            platform: platform,
+            project_name: projectName,
+            aspect_ratio: aspect,
+            scenes: plan.scenes,
+            generate_voiceover: true,
+            voice: "th-TH-PremwadeeNeural"
+        };
+
+        const res = await fetch("/api/video/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.status === "success") {
+            if (platform === "alightmotion") {
+                const downloadUrl = result.results?.alightmotion?.download_url;
+                const folderPath = result.results?.alightmotion?.project_folder;
+                const wantDownload = confirm(`✅ สร้างไฟล์ Alight Motion XML Package สำหรับ "${projectName}" สำเร็จเรียบร้อยแล้วค่ะ!\n\nต้องการดาวน์โหลดไฟล์ .xml ลงเครื่อง/มือถือ ทันทีเลยหรือไม่?`);
+                if (wantDownload && downloadUrl) {
+                    window.location.href = downloadUrl;
+                } else if (folderPath) {
+                    openFolderDirect(folderPath);
+                }
+            } else {
+                const folderPath = platform === "capcut" 
+                    ? result.results?.capcut?.project_folder 
+                    : result.results?.premiere?.export_folder;
+
+                const actionChoice = confirm(`✅ สร้างโปรเจกต์ ${projectName} ลงเครื่องเรียบร้อยแล้วค่ะ!\n\nต้องการเปิดโฟลเดอร์โปรเจกต์ใน Windows Explorer ทันทีหรือไม่?`);
+                if (actionChoice && folderPath) {
+                    openFolderDirect(folderPath);
+                }
+            }
+        } else {
+            alert("⚠️ เกิดข้อผิดพลาด: " + JSON.stringify(result));
+        }
+    } catch (e) {
+        alert("เกิดข้อผิดพลาด: " + e.message);
+    }
+};
+
+window.openVideoStudioWithPlan = function(planData) {
+    let plan = planData;
+    if (typeof planData === "string") {
+        try { plan = JSON.parse(planData); } catch(e) {}
+    }
+    if (plan && plan.scenes) {
+        studioScenes = plan.scenes;
+        const nameInput = document.getElementById("studioProjectName");
+        if (nameInput && plan.title) {
+            nameInput.value = plan.title.replace(/\s+/g, '_');
+        }
+        const aspectSelect = document.getElementById("studioAspectRatio");
+        if (aspectSelect && plan.aspect_ratio) {
+            aspectSelect.value = plan.aspect_ratio;
+        }
+    }
+    openVideoStudioModal();
+};
+
+window.openVideoStudioModal = openVideoStudioModal;
+window.closeVideoStudioModal = closeVideoStudioModal;
+window.switchVideoTab = switchVideoTab;
+window.generateAiStoryboard = generateAiStoryboard;
+window.addNewScene = addNewScene;
+window.deleteScene = deleteScene;
+window.updateSceneField = updateSceneField;
+window.previewSceneTts = previewSceneTts;
+window.executeExportProject = executeExportProject;
+window.openFolderDirect = openFolderDirect;
+window.openCapCutApp = openCapCutApp;
+window.openPremiereApp = openPremiereApp;
+window.loadVideoStatusAndDrafts = loadVideoStatusAndDrafts;
+
+// Init Event Listeners
+document.getElementById("openVideoStudioBtnHeader")?.addEventListener("click", openVideoStudioModal);
+document.getElementById("openVideoStudioBtnPill")?.addEventListener("click", openVideoStudioModal);
+
+// ==================== Mobile Audio Autoplay Unlocker ====================
+let mobileAudioContext = null;
+let isAudioUnlocked = false;
+
+function unlockMobileAudio() {
+    if (isAudioUnlocked) return;
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+            if (!mobileAudioContext) mobileAudioContext = new AudioCtx();
+            if (mobileAudioContext.state === "suspended") mobileAudioContext.resume();
+            const buffer = mobileAudioContext.createBuffer(1, 1, 22050);
+            const source = mobileAudioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(mobileAudioContext.destination);
+            source.start(0);
+        }
+        const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+        silentAudio.play().then(() => silentAudio.pause()).catch(() => {});
+        isAudioUnlocked = true;
+        console.log("[Mobile] Audio unlocked for real-time voice playback");
+    } catch (e) {
+        console.warn("[Mobile] Unlock audio failed:", e);
+    }
+}
+window.addEventListener("touchstart", unlockMobileAudio, { once: true, passive: true });
+window.addEventListener("pointerdown", unlockMobileAudio, { once: true, passive: true });
+window.addEventListener("click", unlockMobileAudio, { once: true, passive: true });
+
+// ==================== Mobile Connect Modal Controller ====================
+let mobileInfoCache = null;
+let currentMobileProtocol = "http";
+
+async function openMobileConnectModal() {
+    const modal = document.getElementById("mobileConnectModal");
+    if (!modal) return;
+    modal.classList.add("active");
+    
+    try {
+        if (!mobileInfoCache) {
+            const res = await fetch("/api/mobile/info");
+            mobileInfoCache = await res.json();
+        }
+        updateMobileModalView();
+    } catch (e) {
+        console.error("Fetch mobile info error:", e);
+    }
+}
+
+function closeMobileConnectModal() {
+    const modal = document.getElementById("mobileConnectModal");
+    if (modal) modal.classList.remove("active");
+}
+
+function switchMobileProtocol(protocol) {
+    currentMobileProtocol = protocol;
+    const tabHttp = document.getElementById("tabMobileHttp");
+    const tabHttps = document.getElementById("tabMobileHttps");
+    if (tabHttp) tabHttp.classList.toggle("active", protocol === "http");
+    if (tabHttps) tabHttps.classList.toggle("active", protocol === "https");
+    updateMobileModalView();
+}
+
+function updateMobileModalView() {
+    const input = document.getElementById("mobileUrlDisplay");
+    const qrImg = document.getElementById("mobileQrImg");
+    if (!mobileInfoCache) return;
+    
+    const targetUrl = currentMobileProtocol === "https" 
+        ? mobileInfoCache.https_url 
+        : mobileInfoCache.http_url;
+        
+    if (input) input.value = targetUrl;
+    if (qrImg) qrImg.src = `/api/mobile/qr?url=${encodeURIComponent(targetUrl)}&t=${Date.now()}`;
+}
+
+function copyMobileLink() {
+    const input = document.getElementById("mobileUrlDisplay");
+    if (!input || !input.value) return;
+    navigator.clipboard.writeText(input.value).then(() => {
+        alert("📋 คัดลอกลิงก์สำหรับมือถือเรียบร้อยแล้วค่ะ:\n" + input.value);
+    }).catch(() => {
+        input.select();
+        document.execCommand("copy");
+        alert("📋 คัดลอกลิงก์เรียบร้อยแล้วค่ะ");
+    });
+}
+
+window.openMobileConnectModal = openMobileConnectModal;
+window.closeMobileConnectModal = closeMobileConnectModal;
+window.switchMobileProtocol = switchMobileProtocol;
+window.copyMobileLink = copyMobileLink;
+
+document.getElementById("openMobileConnectBtn")?.addEventListener("click", openMobileConnectModal);
+
+

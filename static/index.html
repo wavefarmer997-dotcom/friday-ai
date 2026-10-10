@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <meta name="referrer" content="no-referrer">
     <title>Friday - ผู้ช่วย AI ตอบโต้แบบเรียลไทม์ พร้อมระบบความจำ</title>
     <!-- PWA & Mobile Meta -->
@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=3.0">
 </head>
 <body>
     <div class="app-container">
@@ -49,6 +49,14 @@
             </div>
 
             <div class="header-actions">
+                <button id="openMobileConnectBtn" class="action-btn mobile-header-btn" title="เชื่อมต่อใช้งานบนมือถือแบบเรียลไทม์ (QR Code & Voice Call)">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    <span class="btn-label">ต่อมือถือ</span>
+                </button>
+                <button id="openVideoStudioBtnHeader" class="action-btn video-header-btn" title="สตูดิโอตัดต่อวิดีโอ (CapCut PC / Premiere Pro / Alight Motion)">
+                    <i class="fa-solid fa-clapperboard"></i>
+                    <span class="btn-label">ตัดต่อคลิป</span>
+                </button>
                 <button id="installPwaBtn" class="action-btn install-app-btn" style="display: none;" title="ติดตั้งแอป Friday ลงบนมือถือ / เครื่อง">
                     <i class="fa-solid fa-download"></i>
                     <span class="btn-label">ติดตั้งแอป</span>
@@ -77,7 +85,16 @@
         <!-- Main Workspace -->
         <main class="main-layout">
             <!-- Chat Section -->
-            <section class="chat-section">
+            <section class="chat-section" id="chatSection">
+                <!-- Drag and Drop Full Overlay -->
+                <div class="drag-drop-overlay" id="dragDropOverlay">
+                    <div class="drop-card">
+                        <div class="drop-icon-pulse"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                        <h3>วางรูปภาพหรือโฟลเดอร์โปรเจกต์ที่นี่</h3>
+                        <p>Friday พร้อมอ่านโค้ดในโฟลเดอร์ และวิเคราะห์รูปภาพของคุณทันที ✨</p>
+                    </div>
+                </div>
+
                 <div class="messages-container" id="messagesContainer">
                     <!-- Welcome Card -->
                     <div class="welcome-card" id="welcomeCard">
@@ -98,9 +115,9 @@
                             <p class="quick-title">💡 ลองพิมพ์ข้อความเหล่านี้ให้ Friday จำ:</p>
                             <div class="prompt-chips">
                                 <button class="chip" onclick="quickSend('สวัสดีครับ Friday แนะนำตัวเองหน่อย')">"สวัสดีครับ แนะนำตัวเองหน่อย"</button>
-                                <button class="chip" onclick="quickSend('ผมชื่อท็อป ชอบดื่มกาแฟอเมริกาโน่เย็นไม่หวาน')">"ผมชื่อท็อป ชอบดื่มกาแฟอเมริกาโน่เย็น"</button>
+                                <button class="chip" onclick="quickSend('ตัดต่อคลิป 5 เทคนิคเล่นเกม สำหรับ CapCut 9:16')">"🎬 ตัดต่อคลิป CapCut 9:16"</button>
+                                <button class="chip" onclick="quickSend('สร้างโปรเจกต์ Premiere Pro สรุปข่าว AI สั้น')">"🎞️ ทำคลิป Premiere Pro"</button>
                                 <button class="chip" onclick="quickSend('วาดรูปแมวอวกาศสไตล์นีออนไซเบอร์พังก์')">"🎨 วาดรูปแมวอวกาศสไตล์นีออน"</button>
-                                <button class="chip" onclick="quickSend('ช่วยจำว่าผมทำงานเป็น Fullstack Developer')">"ช่วยจำว่าผมทำงานเป็น Developer"</button>
                                 <button class="chip" onclick="quickSend('Friday จำอะไรเกี่ยวกับผมได้บ้าง?')">"Friday จำอะไรเกี่ยวกับผมได้บ้าง?"</button>
                             </div>
                         </div>
@@ -120,17 +137,42 @@
                 <footer class="chat-footer">
                     <!-- Quick Action Pills -->
                     <div class="quick-action-pills" id="quickActionPills">
+                        <button type="button" class="pill-btn highlight-video-pill" id="openVideoStudioBtnPill"><i class="fa-solid fa-clapperboard"></i> ตัดต่อคลิป (CapCut / Premiere)</button>
                         <button type="button" class="pill-btn" data-action="search"><i class="fa-solid fa-magnifying-glass"></i> ค้นหาข้อมูลล่าสุด</button>
                         <button type="button" class="pill-btn" data-action="deep_think"><i class="fa-solid fa-brain"></i> วิเคราะห์เชิงลึก</button>
                         <button type="button" class="pill-btn" data-action="draw"><i class="fa-solid fa-wand-magic-sparkles"></i> สั่งวาดรูป AI</button>
                         <button type="button" class="pill-btn" data-action="memory"><i class="fa-solid fa-lightbulb"></i> สรุปสิ่งที่จำได้</button>
                     </div>
 
+                    <!-- Attachment Tray (แสดงรายการรูปภาพและโฟลเดอร์ที่แนบไว้ก่อนกดส่ง) -->
+                    <div class="attachment-tray" id="attachmentTray" style="display: none;">
+                        <div class="tray-header">
+                            <div class="tray-title"><i class="fa-solid fa-paperclip"></i> รายการที่แนบ (<span id="attachmentCount">0</span>)</div>
+                            <button type="button" class="tray-clear-all" id="clearAllAttachmentsBtn"><i class="fa-solid fa-trash-can"></i> ลบทั้งหมด</button>
+                        </div>
+                        <div class="tray-items-container" id="trayItemsContainer"></div>
+                    </div>
+
+                    <!-- Hidden File Inputs -->
+                    <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
+                    <input type="file" id="folderFileInput" webkitdirectory directory multiple style="display: none;">
+                    <input type="file" id="docFileInput" multiple style="display: none;" accept=".py,.js,.jsx,.ts,.tsx,.html,.css,.json,.md,.txt,.csv,.sql,.sh,.yaml,.yml,.xml,.c,.cpp,.java,.go,.rs,.php,.env">
+
                     <div class="input-wrapper">
-                        <button id="openImageModalBtn" class="voice-btn tool-icon-btn" title="สร้างรูปภาพด้วย AI (Image Generation)">
+                        <!-- ปุ่มแนบรูปภาพ -->
+                        <button type="button" id="attachImageBtn" class="voice-btn tool-icon-btn" title="แนบรูปภาพ (Images) • รองรับลากวาง / วางจากคลิปบอร์ด Ctrl+V">
+                            <i class="fa-solid fa-image"></i>
+                        </button>
+                        <!-- ปุ่มแนบโฟลเดอร์โปรเจกต์ -->
+                        <button type="button" id="attachFolderBtn" class="voice-btn tool-icon-btn" title="แนบโฟลเดอร์โปรเจกต์ (Folder) เพื่อให้ Friday อ่านโค้ดและโครงสร้าง">
+                            <i class="fa-solid fa-folder-open"></i>
+                        </button>
+                        <!-- ปุ่มสร้างรูปภาพ AI -->
+                        <button type="button" id="openImageModalBtn" class="voice-btn tool-icon-btn" title="สร้างรูปภาพด้วย AI (Image Generation)">
                             <i class="fa-solid fa-wand-magic-sparkles"></i>
                         </button>
-                        <button id="voiceBtn" class="voice-btn" title="กดเพื่อพูดด้วยเสียง (Speech-to-Text)">
+                        <!-- ปุ่มไมโครโฟน -->
+                        <button type="button" id="voiceBtn" class="voice-btn" title="กดเพื่อพูดด้วยเสียง (Speech-to-Text)">
                             <i class="fa-solid fa-microphone"></i>
                             <span class="voice-wave"></span>
                         </button>
@@ -196,6 +238,22 @@
                     </button>
                 </div>
                 <div class="modal-body">
+                    <!-- API Sync Status Card -->
+                    <div class="api-sync-card" id="apiSyncCard">
+                        <div class="api-sync-icon-wrap" id="apiSyncIcon">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div class="api-sync-text">
+                            <div class="api-sync-info-title">
+                                <span>บันทึกถาวร & ซิงค์อัตโนมัติ</span>
+                                <span class="sync-tag" id="syncStatusTag">ใช้งานได้ทุกอุปกรณ์</span>
+                            </div>
+                            <div class="api-sync-info-desc" id="syncStatusDesc">
+                                API Key ถูกบันทึกไว้ในระบบและไฟล์ <code>.env</code> แล้ว • มือถือและทุกอุปกรณ์ที่เชื่อมต่อจะใช้คีย์เดียวกันอัตโนมัติ ไม่ต้องกรอกซ้ำ
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>ผู้ให้บริการ AI (Provider):</label>
                         <select id="settingProvider" class="form-control">
@@ -209,10 +267,14 @@
                     <div class="form-group" id="apiKeyGroup">
                         <label>API Key:</label>
                         <div class="input-with-action">
-                            <input type="password" id="settingApiKey" class="form-control" placeholder="ใส่ API Key">
+                            <input type="password" id="settingApiKey" class="form-control" placeholder="ใส่ API Key ใหม่เมื่อต้องการเปลี่ยน">
                             <button type="button" class="btn-addon" id="toggleKeyVisibility">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
+                        </div>
+                        <div id="apiKeyActiveBadge" class="api-key-active-badge" style="display: none;">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span id="apiKeyActiveText">บันทึกคีย์หลักแล้ว • พร้อมใช้งานบนคอมและมือถือ</span>
                         </div>
                         <small class="helper-text" id="apiKeyHelperText">
                             สมัครขอ Google Gemini API Key ได้ฟรีที่: 
@@ -222,7 +284,7 @@
 
                     <div class="form-group" id="modelGroup">
                         <label>ชื่อโมเดล (Model):</label>
-                        <input type="text" id="settingModel" class="form-control" value="gemini-3.8-flash" placeholder="เช่น gemini-3.8-flash, gemini-2.0-flash">
+                        <input type="text" id="settingModel" class="form-control" value="qwen/qwen3.8-27b" placeholder="เช่น qwen/qwen3.8-27b, gemini-2.5-flash">
                     </div>
 
                     <div class="form-group" id="baseUrlGroup" style="display: none;">
@@ -237,6 +299,10 @@
                             <button type="button" class="btn-addon" id="togglePollinationsKeyVisibility">
                                 <i class="fa-solid fa-eye"></i>
                             </button>
+                        </div>
+                        <div id="pollinationsKeyActiveBadge" class="api-key-active-badge" style="display: none;">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span id="pollinationsKeyActiveText">บันทึก Key วาดรูปแล้ว • ใช้ร่วมกันทุกอุปกรณ์</span>
                         </div>
                         <small class="helper-text">
                             รับ Key ฟรีได้ที่: 
@@ -504,8 +570,369 @@
                 </div>
             </div>
         </div>
+    <!-- Mobile Real-time Connect Modal -->
+    <div class="modal-backdrop" id="mobileConnectModal">
+        <div class="modal-card mobile-modal-card">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <div class="mobile-modal-icon">
+                        <i class="fa-solid fa-mobile-screen-button"></i>
+                    </div>
+                    <div>
+                        <h3>เชื่อมต่อใช้งานบนมือถือแบบเรียลไทม์</h3>
+                        <small class="text-muted">สแกน QR Code หรือเปิดลิงก์ในเบราว์เซอร์มือถือ (Wi-Fi เดียวกัน)</small>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeMobileConnectModal()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="mobile-modal-body">
+                <!-- Mode Toggle Tabs (HTTP / HTTPS) -->
+                <div class="mobile-protocol-tabs">
+                    <button class="mobile-tab-btn active" id="tabMobileHttp" onclick="switchMobileProtocol('http')">
+                        <i class="fa-solid fa-globe"></i> 1. HTTP ปกติ (:8000)
+                    </button>
+                    <button class="mobile-tab-btn" id="tabMobileHttps" onclick="switchMobileProtocol('https')">
+                        <i class="fa-solid fa-shield-halved"></i> 2. HTTPS สำหรับไมค์ & โทรเสียง (:8443)
+                    </button>
+                </div>
+
+                <!-- QR Code & Link Area -->
+                <div class="mobile-qr-section">
+                    <div class="mobile-qr-box">
+                        <img id="mobileQrImg" src="/api/mobile/qr" alt="Mobile QR Code">
+                        <div class="qr-scan-badge"><i class="fa-solid fa-camera"></i> สแกนด้วยกล้องมือถือ</div>
+                    </div>
+                    <div class="mobile-url-box">
+                        <label class="url-label">ลิงก์เข้าใช้งานสำหรับมือถือ:</label>
+                        <div class="url-input-wrap">
+                            <input type="text" id="mobileUrlDisplay" readonly value="กำลังโหลดลิงก์...">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="copyMobileLink()">
+                                <i class="fa-solid fa-copy"></i> คัดลอก
+                            </button>
+                        </div>
+                        <p class="url-hint">
+                            <i class="fa-solid fa-wifi"></i> เชื่อมต่อโทรศัพท์มือถือเข้ากับ Wi-Fi เดียวกับคอมพิวเตอร์นี้
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Native Android APK Download Banner -->
+                <div class="tip-card highlight" style="border-color: rgba(59, 130, 246, 0.5); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1)); margin-bottom: 12px;">
+                    <div class="tip-header" style="color: #60a5fa; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <i class="fa-brands fa-android text-success" style="font-size: 1.1rem; color: #34d399;"></i>
+                            <strong>ดาวน์โหลดแอป Android (.apk) ติดตั้งลงมือถือโดยตรง:</strong>
+                        </div>
+                        <span style="background: rgba(16, 185, 129, 0.25); color: #34d399; font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; font-weight: 600;">แอป Android แท้</span>
+                    </div>
+                    <div class="tip-content">
+                        <p>ติดตั้งเป็นแอปจริงบนมือถือ Android (ไฟล์ <code>Friday-AI.apk</code>) ได้ทันที เปิดใช้งานได้เต็มจอ ไมโครโฟนและเสียงสดทำงาน 100% โดยไม่ต้องพึ่งเบราว์เซอร์:</p>
+                        <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <a href="https://github.com/wavefarmer997-dotcom/friday-ai/releases" target="_blank" rel="noreferrer" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px;">
+                                <i class="fa-solid fa-download"></i> ดาวน์โหลด Friday-AI.apk (GitHub)
+                            </a>
+                            <a href="/download/Friday-AI.apk" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px;">
+                                <i class="fa-solid fa-server"></i> ดาวน์โหลดจากเซิร์ฟเวอร์นี้
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Voice & Realtime Mic Guide -->
+                <div class="mobile-tips-accordion">
+                    <div class="tip-card" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);">
+                        <div class="tip-header" style="color: #34d399;">
+                            <i class="fa-solid fa-key"></i>
+                            <strong>🟢 ซิงค์ API Key กับเครื่องหลักอัตโนมัติ (ไม่ต้องกรอกบนมือถือ):</strong>
+                        </div>
+                        <div class="tip-content">
+                            <p>มือถือของคุณจะเชื่อมต่อกับสมองกลและใช้ <strong>API Key เดียวกันกับคอมพิวเตอร์หลักทันที</strong> ไม่ว่าจะเป็น Groq, Gemini หรือคีย์สำหรับวาดรูปภาพ คุณสามารถแชท สั่งงาน และใช้เสียงได้ทันทีโดยไม่ต้องใส่คีย์ซ้ำบนมือถือค่ะ!</p>
+                        </div>
+                    </div>
+
+                    <div class="tip-card highlight">
+                        <div class="tip-header">
+                            <i class="fa-solid fa-microphone-lines text-warning"></i>
+                            <strong>วิธีทำให้เปิดไมค์ & คุยด้วยเสียงบนมือถือได้ 100%:</strong>
+                        </div>
+                        <div class="tip-content">
+                            <p>เนื่องจากเบราว์เซอร์บนมือถือ (Chrome/Safari) มีระบบความปลอดภัยสูง หากเข้าผ่าน HTTP ปกติจะปิดไมค์ ให้เลือก 1 ใน 2 วิธีนี้ค่ะ:</p>
+                            <ul>
+                                <li>
+                                    <strong>วิธีที่ 1 (แนะนำมากที่สุดสำหรับ Android Chrome):</strong>
+                                    เข้าผ่านลิงก์ HTTP ปกติ ➔ เปิดแท็บใหม่พิมพ์ <code>chrome://flags</code> ➔ ค้นหา <code>Insecure origins treated as secure</code> ➔ ใส่ลิงก์ของ Friday ➔ เลือก <strong>Enabled</strong> แล้วกด <strong>Relaunch</strong> ไมค์และการคุยด้วยเสียงจะใช้งานได้เต็มระบบทันที!
+                                </li>
+                                <li>
+                                    <strong>วิธีที่ 2 (เข้าผ่าน HTTPS):</strong>
+                                    เลือกแท็บ HTTPS ด้านบน แล้วสแกนเข้าพอร์ต <code>:8443</code> (หากขึ้นหน้าเตือน ให้กด ขั้นสูง/Advanced ➔ ไปยังเว็บไซต์) ไมค์จะเปิดได้ทันที
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="tip-card">
+                        <div class="tip-header">
+                            <i class="fa-solid fa-download text-info"></i>
+                            <strong>วิธีติดตั้งเป็นแอปเต็มหน้าจอ (PWA):</strong>
+                        </div>
+                        <div class="tip-content">
+                            <p>บน Google Chrome มือถือ: แตะที่เมนู 3 จุด (⋮) มุมขวาบน ➔ เลือก <strong>"เพิ่มลงในหน้าจอหลัก (Add to Home screen)"</strong> หรือแตะปุ่ม <strong>"ติดตั้งแอป"</strong> บนหัวเว็บ จะได้แอป Friday ใช้งานได้เต็มจอทันทีค่ะ!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <!-- Folder Tree Inspection Modal -->
+    <div class="modal-backdrop" id="folderTreeModal">
+        <div class="modal-card folder-modal-card">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <i class="fa-solid fa-folder-tree folder-title-icon"></i>
+                    <div>
+                        <h3 id="folderModalTitle">โครงสร้างไฟล์ในโฟลเดอร์</h3>
+                        <small id="folderModalSubtitle" class="text-muted"></small>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeFolderTreeModal()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="folder-modal-body">
+                <div class="folder-tree-view" id="folderModalTree"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Studio Modal (CapCut & Premiere Pro Integration) -->
+    <div class="modal-backdrop" id="videoStudioModal">
+        <div class="modal-card video-studio-card">
+            <div class="modal-header video-modal-header">
+                <div class="modal-title-wrap">
+                    <div class="video-modal-icon">
+                        <i class="fa-solid fa-clapperboard"></i>
+                    </div>
+                    <div>
+                        <h3 id="videoModalTitle">Friday Video Editing Studio</h3>
+                        <small class="text-muted">สร้างและจัดการโปรเจกต์ลง CapCut PC, Adobe Premiere Pro และ Alight Motion</small>
+                    </div>
+                </div>
+                <div class="modal-header-actions">
+                    <button class="modal-close" onclick="closeVideoStudioModal()" title="ปิดหน้าต่าง">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Environment Detection Status Bar -->
+            <div class="video-env-bar">
+                <div class="env-pill" id="capcutStatusPill">
+                    <span class="env-dot pulse-teal"></span>
+                    <i class="fa-solid fa-scissors"></i>
+                    <span class="env-label">CapCut PC:</span>
+                    <strong id="capcutStatusText">กำลังตรวจสอบ...</strong>
+                </div>
+                <div class="env-pill" id="premiereStatusPill">
+                    <span class="env-dot pulse-purple"></span>
+                    <i class="fa-solid fa-film"></i>
+                    <span class="env-label">Premiere Pro:</span>
+                    <strong id="premiereStatusText">กำลังตรวจสอบ...</strong>
+                </div>
+                <div class="env-pill" id="alightStatusPill">
+                    <span class="env-dot pulse-amber"></span>
+                    <i class="fa-solid fa-play"></i>
+                    <span class="env-label">Alight Motion:</span>
+                    <strong id="alightStatusText">พร้อมส่งออก XML</strong>
+                </div>
+            </div>
+
+            <!-- Studio Tab Navigation -->
+            <div class="video-studio-tabs">
+                <button class="video-tab-btn active" data-tab="creator" onclick="switchVideoTab('creator')">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> สตูดิโอสร้างคลิป (AI Director)
+                </button>
+                <button class="video-tab-btn" data-tab="local" onclick="switchVideoTab('local')">
+                    <i class="fa-solid fa-folder-open"></i> โปรเจกต์ในเครื่อง (<span id="localProjectsCount">0</span>)
+                </button>
+                <button class="video-tab-btn" data-tab="help" onclick="switchVideoTab('help')">
+                    <i class="fa-solid fa-circle-question"></i> วิธีใช้งาน CapCut, Premiere & Alight Motion
+                </button>
+            </div>
+
+            <div class="video-modal-body">
+                <!-- Tab 1: AI Creator & Storyboard Editor -->
+                <div class="video-tab-content active" id="tabContent_creator">
+                    <!-- Project Configuration Bar -->
+                    <div class="video-config-grid">
+                        <div class="config-field">
+                            <label><i class="fa-solid fa-heading"></i> ชื่อโปรเจกต์</label>
+                            <input type="text" id="studioProjectName" class="form-input" placeholder="เช่น TikTok_Viral_Trick_1" value="Friday_Video_Project">
+                        </div>
+                        <div class="config-field">
+                            <label><i class="fa-solid fa-mobile-screen"></i> สัดส่วนหน้าจอ (Aspect Ratio)</label>
+                            <select id="studioAspectRatio" class="form-select">
+                                <option value="9:16" selected>9:16 แนวตั้ง (TikTok / Shorts / Reels / Alight - 1080x1920)</option>
+                                <option value="16:9">16:9 แนวนอน (YouTube / ทั่วไป - 1920x1080)</option>
+                                <option value="1:1">1:1 สี่เหลี่ยมจัตุรัส (Instagram / Post - 1080x1080)</option>
+                            </select>
+                        </div>
+                        <div class="config-field">
+                            <label><i class="fa-solid fa-microphone-lines"></i> เสียงพากย์ AI (Edge-TTS)</label>
+                            <select id="studioVoiceSelect" class="form-select">
+                                <option value="th-TH-PremwadeeNeural" selected>🇹🇭 เปรมวดี (หญิงไทย นุ่มนวล สมจริง)</option>
+                                <option value="th-TH-NiwatNeural">🇹🇭 นิวัฒน์ (ชายไทย สุภาพ หนักแน่น)</option>
+                                <option value="en-US-JennyNeural">🇺🇸 Jenny (English US Natural)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- AI Blueprint Generator Box -->
+                    <div class="ai-prompt-box">
+                        <div class="ai-prompt-header">
+                            <span><i class="fa-solid fa-sparkles"></i> ให้ Friday AI วางโครงเรื่อง & สคริปต์อัตโนมัติ</span>
+                        </div>
+                        <div class="ai-prompt-input-row">
+                            <input type="text" id="studioTopicPrompt" class="form-input prompt-input" placeholder="พิมพ์ไอเดีย เช่น 5 เทคนิคเล่น Valorant ให้ขึ้นแรงค์, สรุปข่าว AI สั้น 30 วิ...">
+                            <button type="button" id="btnStudioAiPlan" class="btn btn-primary glow-btn" onclick="generateAiStoryboard()">
+                                <i class="fa-solid fa-bolt"></i> วางโครงเรื่องทันที
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Storyboard Timeline Scenes Container -->
+                    <div class="timeline-editor-wrapper">
+                        <div class="timeline-header-row">
+                            <div class="timeline-title">
+                                <i class="fa-solid fa-layer-group"></i> ไทม์ไลน์ฉากและเสียงพากย์ (Storyboard Scenes)
+                                <span class="badge" id="totalDurationBadge">ความยาวรวม: ~15.0 วินาที</span>
+                            </div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="addNewScene()">
+                                <i class="fa-solid fa-plus"></i> เพิ่มฉากใหม่
+                            </button>
+                        </div>
+
+                        <div class="scenes-timeline-list" id="studioScenesList">
+                            <!-- Dynamic Scene Cards injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Direct Action Buttons -->
+                    <div class="studio-action-footer">
+                        <div class="action-info-text">
+                            <i class="fa-solid fa-circle-check text-success"></i> ระบบจะเขียนไฟล์โปรเจกต์และสร้างเสียงพากย์บันทึกลงคอมพิวเตอร์ของคุณโดยตรง
+                        </div>
+                        <div class="action-buttons-group">
+                            <button type="button" class="btn btn-capcut" id="btnBuildCapCut" onclick="executeExportProject('capcut')">
+                                <i class="fa-solid fa-scissors"></i> บันทึกลง CapCut PC ทันที
+                            </button>
+                            <button type="button" class="btn btn-premiere" id="btnBuildPremiere" onclick="executeExportProject('premiere')">
+                                <i class="fa-solid fa-film"></i> ส่งออก Premiere Pro (.xml + .jsx)
+                            </button>
+                            <button type="button" class="btn btn-alight" id="btnBuildAlight" onclick="executeExportProject('alightmotion')">
+                                <i class="fa-solid fa-play"></i> ส่งออก Alight Motion (.xml)
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btnBuildBoth" onclick="executeExportProject('all')">
+                                <i class="fa-solid fa-bolt"></i> ส่งออกครบทุกแอป
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Local Projects Browser -->
+                <div class="video-tab-content" id="tabContent_local">
+                    <div class="local-projects-toolbar">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="localProjectSearch" class="form-input" placeholder="ค้นหาโปรเจกต์ในเครื่อง..." oninput="filterLocalProjects()">
+                        </div>
+                        <div class="toolbar-actions">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openCapCutApp()">
+                                <i class="fa-solid fa-scissors"></i> เปิดโปรแกรม CapCut
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openPremiereApp()">
+                                <i class="fa-solid fa-film"></i> เปิด Premiere Pro
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="loadVideoStatusAndDrafts()">
+                                <i class="fa-solid fa-rotate"></i> รีเฟรช
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="local-projects-columns">
+                        <!-- CapCut PC Projects Column -->
+                        <div class="projects-column">
+                            <div class="column-title capcut-title">
+                                <i class="fa-solid fa-scissors"></i> โปรเจกต์ใน CapCut PC (<span id="capcutCountLabel">0</span>)
+                            </div>
+                            <div class="projects-list-scroll" id="capcutProjectsList">
+                                <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> กำลังโหลด...</div>
+                            </div>
+                        </div>
+
+                        <!-- Premiere Pro Exports Column -->
+                        <div class="projects-column">
+                            <div class="column-title premiere-title">
+                                <i class="fa-solid fa-film"></i> โปรเจกต์ Premiere Pro (<span id="premiereCountLabel">0</span>)
+                            </div>
+                            <div class="projects-list-scroll" id="premiereProjectsList">
+                                <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> กำลังโหลด...</div>
+                            </div>
+                        </div>
+
+                        <!-- Alight Motion Exports Column -->
+                        <div class="projects-column">
+                            <div class="column-title alight-title">
+                                <i class="fa-solid fa-play"></i> โปรเจกต์ Alight Motion XML (<span id="alightCountLabel">0</span>)
+                            </div>
+                            <div class="projects-list-scroll" id="alightProjectsList">
+                                <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> กำลังโหลด...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Help & Guide -->
+                <div class="video-tab-content" id="tabContent_help">
+                    <div class="guide-cards-grid">
+                        <div class="guide-card">
+                            <div class="guide-card-icon capcut-glow"><i class="fa-solid fa-scissors"></i></div>
+                            <h4>ขั้นตอนการใช้งานใน CapCut PC</h4>
+                            <ol>
+                                <li>เมื่อกดปุ่ม <strong>"บันทึกลง CapCut PC ทันที"</strong> Friday จะสร้างโครงสร้างโปรเจกต์ <code>draft_content.json</code> ลงในโฟลเดอร์ Drafts ของเครื่องคุณ</li>
+                                <li>ระบบจะลงทะเบียนโปรเจกต์เข้าสู่ <code>root_meta_info.json</code> ของ CapCut อัตโนมัติ</li>
+                                <li>เมื่อคุณเปิดโปรแกรม <strong>CapCut PC</strong> จะพบโปรเจกต์นี้แสดงอยู่ในหน้าแรก (Projects) ทันที!</li>
+                                <li>สามารถเปิดคลิปเข้าไป ลากไฟล์วิดีโอ/ฟุตเทจเข้ามาวางทับซับไตเติลและเสียงพากย์ได้ทันที</li>
+                            </ol>
+                        </div>
+                        <div class="guide-card">
+                            <div class="guide-card-icon premiere-glow"><i class="fa-solid fa-film"></i></div>
+                            <h4>ขั้นตอนการใช้งานใน Adobe Premiere Pro</h4>
+                            <ol>
+                                <li>เมื่อกดปุ่ม <strong>"ส่งออก Premiere Pro"</strong> Friday จะสร้างไฟล์ <code>.xml</code> (Final Cut Pro Interchange), <code>.jsx</code> (ExtendScript) และ <code>.srt</code> (Subtitles)</li>
+                                <li>เปิดโปรแกรม Adobe Premiere Pro ขึ้นมา</li>
+                                <li>ไปที่เมนู <strong>File &gt; Import...</strong> (หรือกด <code>Ctrl + I</code>) แล้วเลือกไฟล์ <code>.xml</code> ในโฟลเดอร์โปรเจกต์</li>
+                                <li>Sequence จะถูกสร้างขึ้นมาพร้อม Markers ทุกฉาก และไฟล์เสียงพากย์จะถูกวางลงใน Audio Track โดยอัตโนมัติ!</li>
+                            </ol>
+                        </div>
+                        <div class="guide-card">
+                            <div class="guide-card-icon alight-glow"><i class="fa-solid fa-play"></i></div>
+                            <h4>ขั้นตอนการใช้งานใน Alight Motion (มือถือ Android / iOS)</h4>
+                            <ol>
+                                <li>เมื่อกดปุ่ม <strong>"ส่งออก Alight Motion (.xml)"</strong> Friday จะสร้างไฟล์ Project Package <code>.xml</code> พร้อม Typography, Velocity Scale และเสียงพากย์</li>
+                                <li>ดาวน์โหลดไฟล์ <code>.xml</code> โดยกดปุ่ม <strong>"ดาวน์โหลด XML"</strong> หรือแชร์ไฟล์เข้าสู่โทรศัพท์มือถือ</li>
+                                <li>บนมือถือ: เปิดไฟล์ <code>.xml</code> หรือกดแชร์ แล้วเลือกเปิดด้วย <strong>Alight Motion</strong></li>
+                                <li>โปรเจกต์จะถูก Import เข้าสู่หน้า Projects ใน Alight Motion พร้อมสำหรับปรับแต่งเอฟเฟกต์และเรนเดอร์ทันที!</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=3.0"></script>
 </body>
 </html>

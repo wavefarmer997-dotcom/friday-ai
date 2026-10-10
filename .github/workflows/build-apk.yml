@@ -1,0 +1,63 @@
+name: Build Friday Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Android APK
+        run: |
+          cd android
+          gradle assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          mkdir -p build-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/Friday-AI.apk
+
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Friday-AI.apk
+          path: build-output/Friday-AI.apk
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v1.0.0-mobile
+          name: Friday AI Mobile App v1.0.0
+          body: |
+            📱 **Friday AI Android Application (.apk)**
+            
+            ไฟล์ติดตั้งแอปสำหรับโทรศัพท์มือถือ Android เพื่อใช้งาน Friday แบบเรียลไทม์
+            - 🎙️ รองรับไมโครโฟนและการคุยด้วยเสียงสด 100% (Native WebRTC Permission)
+            - 🧠 เชื่อมต่อกับสมองกลและ API Key เดียวกับคอมพิวเตอร์หลักอัตโนมัติ
+            - ⚙️ ปรับเปลี่ยน Server IP ภายในแอปได้ตลอดเวลา
+          files: build-output/Friday-AI.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

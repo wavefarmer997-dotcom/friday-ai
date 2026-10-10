@@ -5,8 +5,7 @@ FastAPI Web Server + WebSocket Real-time Streaming + SQLite Memory Management
 
 import os
 import json
-import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -15,12 +14,62 @@ from typing import Optional, List, Dict, Any
 from memory_engine import MemoryEngine
 from ai_service import AIService
 from obsidian_sync import ObsidianSync
+from video_project_service import VideoProjectService
+from dotenv import load_dotenv
+
+ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(ENV_PATH)
+
+def persist_settings_to_env(engine: MemoryEngine):
+    """บันทึกคอนฟิกปัจจุบันลงไฟล์ .env ถาวร เพื่อสำรองข้อมูลและแชร์กับมือถือ 100%"""
+    try:
+        keys_to_export = [
+            ("API_KEY", engine.get_setting("api_key", "")),
+            ("POLLINATIONS_API_KEY", engine.get_setting("pollinations_api_key", "")),
+            ("API_PROVIDER", engine.get_setting("api_provider", "openai")),
+            ("MODEL_NAME", engine.get_setting("model_name", "qwen/qwen3.8-27b")),
+            ("OPENAI_BASE_URL", engine.get_setting("openai_base_url", "https://api.groq.com/openai/v1")),
+            ("OBSIDIAN_VAULT_PATH", engine.get_setting("obsidian_vault_path", r"D:\ob\WIKI")),
+            ("OBSIDIAN_SYNC_ENABLED", engine.get_setting("obsidian_sync_enabled", "true")),
+            ("GITHUB_SYNC_ENABLED", engine.get_setting("github_sync_enabled", "true")),
+            ("GITHUB_REMOTE_URL", engine.get_setting("github_remote_url", "")),
+        ]
+        lines = [
+            "# Friday AI Environment Configuration & API Keys",
+            "# ไฟล์นี้บันทึกและซิงค์ API Key ของเครื่องหลักกับโทรศัพท์มือถืออัตโนมัติ",
+            ""
+        ]
+        for env_k, val in keys_to_export:
+            if val:
+                lines.append(f"{env_k}={val}")
+        with open(ENV_PATH, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception as e:
+        print(f"[ENV] Failed to persist .env: {e}")
+
+def sync_env_and_db(engine: MemoryEngine):
+    """ซิงค์ค่าระหว่างไฟล์ .env และ SQLite Database เพื่อให้ API Key ไม่สูญหายและแชร์กับมือถือ 100%"""
+    env_map = {
+        "api_key": os.getenv("API_KEY"),
+        "pollinations_api_key": os.getenv("POLLINATIONS_API_KEY"),
+        "api_provider": os.getenv("API_PROVIDER"),
+        "model_name": os.getenv("MODEL_NAME"),
+        "openai_base_url": os.getenv("OPENAI_BASE_URL"),
+        "obsidian_vault_path": os.getenv("OBSIDIAN_VAULT_PATH"),
+        "github_remote_url": os.getenv("GITHUB_REMOTE_URL"),
+    }
+    for k, v in env_map.items():
+        if v and not engine.get_setting(k):
+            engine.set_setting(k, v)
+    persist_settings_to_env(engine)
 
 app = FastAPI(title="Friday - Real-time AI Assistant with Memory")
 
-# เริ่มต้นระบบความจำ บริการ AI และระบบซิงค์ Obsidian Vault
+# เริ่มต้นระบบความจำ บริการ AI บริการสร้างโปรเจกต์วิดีโอ และระบบซิงค์ Obsidian Vault
 memory_engine = MemoryEngine()
+sync_env_and_db(memory_engine)
 ai_service = AIService(memory_engine)
+video_service = VideoProjectService()
 
 import platform as _platform
 _on_cloud = _platform.system() != "Windows"  # บน Render/Linux ปิด Obsidian sync อัตโนมัติ
@@ -165,6 +214,209 @@ async def api_image_proxy(url: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== Video Project & Editing APIs (CapCut & Premiere Pro) ====================
+
+class VideoPlanRequest(BaseModel):
+    prompt: str
+    aspect_ratio: Optional[str] = "9:16"
+    target_duration: Optional[float] = 30.0
+
+class VideoCreateRequest(BaseModel):
+    platform: str  # "capcut", "premiere", or "both"
+    project_name: str
+    aspect_ratio: Optional[str] = "9:16"
+    scenes: List[Dict[str, Any]]
+    generate_voiceover: Optional[bool] = True
+    voice: Optional[str] = "th-TH-PremwadeeNeural"
+
+class VideoOpenRequest(BaseModel):
+    action: str  # "folder", "capcut", "premiere", "alightmotion"
+    target_path: Optional[str] = None
+
+@app.get("/api/video/status")
+async def get_video_status():
+    """ตรวจสอบสถานะของ CapCut, Premiere Pro และ Alight Motion บนเครื่อง"""
+    env = video_service.detect_environment()
+    capcut_drafts = video_service.list_capcut_drafts()
+    prem_projects = video_service.list_premiere_projects()
+    am_projects = video_service.list_alightmotion_projects()
+    return {
+        "status": "ok",
+        "environment": env,
+        "capcut_draft_count": len(capcut_drafts),
+        "premiere_project_count": len(prem_projects),
+        "alightmotion_project_count": len(am_projects),
+        "alightmotion_count": len(am_projects)
+    }
+
+@app.get("/api/video/drafts")
+async def get_video_drafts():
+    """ดึงรายชื่อโปรเจกต์ CapCut, Premiere Pro และ Alight Motion ในเครื่อง"""
+    return {
+        "capcut_drafts": video_service.list_capcut_drafts()[:15],
+        "premiere_projects": video_service.list_premiere_projects()[:15],
+        "alightmotion_projects": video_service.list_alightmotion_projects()[:15]
+    }
+
+@app.post("/api/video/plan")
+async def plan_video_project(req: VideoPlanRequest):
+    """วางโครงสร้างคลิป Storyboard, Scene Timecodes, เสียงพากย์ จาก Prompt"""
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="กรุณาระบุหัวข้อหรือไอเดียคลิป")
+    plan = video_service.plan_quick_storyboard(req.prompt, aspect_ratio=req.aspect_ratio or "9:16")
+    return plan
+
+@app.post("/api/video/create")
+async def create_video_project(req: VideoCreateRequest):
+    """สร้างโปรเจกต์ลง CapCut PC, Adobe Premiere Pro และ/หรือ Alight Motion"""
+    if not req.project_name.strip():
+        raise HTTPException(status_code=400, detail="กรุณาระบุชื่อโปรเจกต์")
+    if not req.scenes:
+        raise HTTPException(status_code=400, detail="กรุณาระบุอย่างน้อย 1 ฉากสำหรับตัดต่อ")
+
+    results = {}
+    plat = req.platform.lower()
+
+    if plat in ("capcut", "both", "all"):
+        try:
+            cap_res = await video_service.create_capcut_project(
+                project_name=req.project_name,
+                aspect_ratio=req.aspect_ratio or "9:16",
+                scenes=req.scenes,
+                generate_voiceover=req.generate_voiceover if req.generate_voiceover is not None else True,
+                voice=req.voice or "th-TH-PremwadeeNeural"
+            )
+            results["capcut"] = cap_res
+        except Exception as e:
+            results["capcut"] = {"status": "error", "message": str(e)}
+
+    if plat in ("premiere", "both", "all"):
+        try:
+            prem_res = await video_service.create_premiere_project(
+                project_name=req.project_name,
+                aspect_ratio=req.aspect_ratio or "16:9",
+                scenes=req.scenes,
+                generate_voiceover=req.generate_voiceover if req.generate_voiceover is not None else True,
+                voice=req.voice or "th-TH-PremwadeeNeural"
+            )
+            results["premiere"] = prem_res
+        except Exception as e:
+            results["premiere"] = {"status": "error", "message": str(e)}
+
+    if plat in ("alightmotion", "alight", "all"):
+        try:
+            am_res = await video_service.create_alight_motion_project(
+                project_name=req.project_name,
+                aspect_ratio=req.aspect_ratio or "9:16",
+                scenes=req.scenes,
+                generate_voiceover=req.generate_voiceover if req.generate_voiceover is not None else True,
+                voice=req.voice or "th-TH-PremwadeeNeural"
+            )
+            results["alightmotion"] = am_res
+        except Exception as e:
+            results["alightmotion"] = {"status": "error", "message": str(e)}
+
+    return {
+        "status": "success",
+        "platform": req.platform,
+        "results": results
+    }
+
+@app.get("/api/video/download-alightmotion/{project_name}")
+async def download_alight_motion_xml(project_name: str):
+    """ดาวน์โหลดไฟล์ Alight Motion Project Package XML สำหรับนำเข้าแอปบนมือถือ/แท็บเล็ต"""
+    clean_name = video_service._sanitize_name(project_name)
+    xml_path = os.path.join(video_service.base_export_dir, "alightmotion", clean_name, f"{clean_name}.xml")
+    if not os.path.exists(xml_path):
+        raise HTTPException(status_code=404, detail="ไม่พบไฟล์โปรเจกต์ Alight Motion XML")
+    return FileResponse(
+        xml_path,
+        media_type="application/xml",
+        filename=f"{clean_name}.xml",
+        headers={"Content-Disposition": f'attachment; filename="{clean_name}.xml"'}
+    )
+
+@app.post("/api/video/open")
+async def open_video_target(req: VideoOpenRequest):
+    """เปิดโฟลเดอร์โปรเจกต์ใน Explorer หรือสั่งเปิด CapCut / Premiere Pro"""
+    action = req.action.lower()
+    success = False
+    msg = ""
+
+    if action == "folder" and req.target_path:
+        success = video_service.open_folder(req.target_path)
+        msg = "เปิดโฟลเดอร์ใน Windows Explorer แล้ว" if success else "ไม่พบโฟลเดอร์ปลายทาง"
+    elif action == "capcut":
+        success = video_service.launch_capcut()
+        msg = "เปิดโปรแกรม CapCut เรียบร้อยแล้ว" if success else "ไม่พบตัวรันโปรแกรม CapCut"
+    elif action == "premiere":
+        success = video_service.launch_premiere(req.target_path)
+        msg = "เปิดโปรแกรม Adobe Premiere Pro เรียบร้อยแล้ว" if success else "ไม่พบตัวรันโปรแกรม Premiere Pro"
+    elif action == "alightmotion":
+        am_dir = os.path.join(video_service.base_export_dir, "alightmotion")
+        success = video_service.open_folder(req.target_path or am_dir)
+        msg = "เปิดโฟลเดอร์โปรเจกต์ Alight Motion เรียบร้อยแล้ว" if success else "ไม่พบโฟลเดอร์ Alight Motion"
+    else:
+        raise HTTPException(status_code=400, detail="Action ไม่ถูกต้อง")
+
+    return {"status": "success" if success else "failed", "message": msg}
+
+# ==================== REST APIs: Mobile Connectivity ====================
+
+@app.get("/api/mobile/info")
+async def get_mobile_info():
+    """ดึงข้อมูล IP, Port และ URL สำหรับเชื่อมต่อใช้งานบนมือถือ"""
+    from ssl_helper import get_local_ip, ensure_ssl_certificates
+    local_ip = get_local_ip()
+    cert_path, key_path = ensure_ssl_certificates()
+    has_ssl = bool(cert_path and os.path.exists(cert_path) and key_path and os.path.exists(key_path))
+    return {
+        "local_ip": local_ip,
+        "http_port": 8000,
+        "http_url": f"http://{local_ip}:8000",
+        "https_port": 8443,
+        "https_url": f"https://{local_ip}:8443",
+        "has_ssl": has_ssl,
+        "chrome_flags_url": "chrome://flags/#unsafely-treat-insecure-origin-as-secure"
+    }
+
+@app.get("/api/mobile/qr")
+async def get_mobile_qr(url: Optional[str] = None):
+    """สร้าง QR Code Image (PNG) แบบไดนามิกสำหรับสแกนเข้าใช้งานบนมือถือ"""
+    import io
+    import qrcode
+    from ssl_helper import get_local_ip
+
+    target = url
+    if not target:
+        local_ip = get_local_ip()
+        target = f"http://{local_ip}:8000"
+
+    qr = qrcode.QRCode(box_size=8, border=2)
+    qr.add_data(target)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0f172a", back_color="#ffffff")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/download/Friday-AI.apk")
+async def download_friday_apk():
+    """เสิร์ฟไฟล์ติดตั้ง Android APK สำหรับติดตั้งลงโทรศัพท์มือถือโดยตรง"""
+    from fastapi.responses import RedirectResponse
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "Friday-AI.apk"),
+        os.path.join(os.path.dirname(__file__), "static", "downloads", "Friday-AI.apk"),
+        os.path.join(os.path.dirname(__file__), "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+        os.path.join(os.path.dirname(__file__), "android", "app", "build", "outputs", "apk", "release", "app-release.apk"),
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            return FileResponse(p, media_type="application/vnd.android.package-archive", filename="Friday-AI.apk")
+    
+    # หากยังไม่มีไฟล์ในเครื่อง ให้พาไปยังหน้า GitHub Releases เพื่อดาวน์โหลด
+    return RedirectResponse(url="https://github.com/wavefarmer997-dotcom/friday-ai/releases/latest")
+
 # ==================== REST APIs: Memory Management ====================
 
 class MemoryCreate(BaseModel):
@@ -257,7 +509,10 @@ async def get_settings():
         "obsidian_available": obsidian_sync.is_available(),
         "github_sync_enabled": gh_enabled,
         "github_remote_url": gh_url,
-        "git_info": git_info
+        "git_info": git_info,
+        "api_key_synced": bool(raw_key.strip()),
+        "shared_with_mobile": True,
+        "saved_to_env": os.path.exists(ENV_PATH)
     }
 
 @app.post("/api/settings")
@@ -290,7 +545,10 @@ async def update_settings(settings: SettingsUpdate):
         clean_gh_url = settings.github_remote_url.strip()
         memory_engine.set_setting("github_remote_url", clean_gh_url)
         obsidian_sync.set_remote_url(clean_gh_url)
-    return {"status": "success"}
+    
+    # ซิงค์ค่าล่าสุดลง .env ถาวร
+    persist_settings_to_env(memory_engine)
+    return {"status": "success", "synced_to_env": True, "shared_with_mobile": True}
 
 @app.post("/api/obsidian/sync-now")
 async def api_obsidian_sync_now():
@@ -341,12 +599,28 @@ async def websocket_chat(websocket: WebSocket):
             if msg_type == "message":
                 user_message = data.get("content", "").strip()
                 session_id = data.get("session_id", "default")
+                images = data.get("images", [])  # list of {name, mime_type, data}
+                attachments = data.get("attachments", [])  # list of {type, name, files, ...}
                 
+                # หากผู้ใช้ไม่ได้พิมพ์ข้อความมา แต่มีการแนบรูปภาพหรือโฟลเดอร์ ให้ตั้ง prompt อัตโนมัติ
                 if not user_message:
-                    continue
+                    if images and attachments:
+                        user_message = "ช่วยดูและวิเคราะห์รูปภาพรวมถึงโฟลเดอร์ไฟล์ที่แนบมานี้ให้หน่อยค่ะ"
+                    elif images:
+                        user_message = "ช่วยดูและวิเคราะห์รูปภาพที่แนบมานี้ให้หน่อยค่ะ"
+                    elif attachments:
+                        user_message = "ช่วยดูโครงสร้างและเนื้อหาไฟล์ในโฟลเดอร์นี้ แล้วสรุป/อธิบายการทำงานให้หน่อยค่ะ"
+                    else:
+                        continue
 
-                # 1. บันทึกข้อความผู้ใช้ลงประวัติการสนทนา
-                memory_engine.add_message(session_id, "user", user_message)
+                # 1. บันทึกข้อความผู้ใช้ลงประวัติการสนทนา (รวมแท็กบอกแนบไฟล์/รูปเพื่อ Context ในความจำ)
+                history_label = user_message
+                if images:
+                    history_label += f" [📷 แนบ {len(images)} รูปภาพ]"
+                if attachments:
+                    att_names = ", ".join([a.get("name", "folder") for a in attachments])
+                    history_label += f" [📁 แนบ {att_names}]"
+                memory_engine.add_message(session_id, "user", history_label)
 
                 # 2. วิเคราะห์ข้อมูลสำคัญเพื่อจดจำอัตโนมัติ (Auto-Extract Fact)
                 new_memories = memory_engine.auto_extract_and_remember(user_message)
@@ -364,7 +638,7 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.send_json({"type": "stream_start"})
                 
                 full_reply = ""
-                async for chunk in ai_service.generate_stream(user_message, session_id):
+                async for chunk in ai_service.generate_stream(user_message, session_id, images=images, attachments=attachments):
                     full_reply += chunk
                     await websocket.send_json({
                         "type": "stream_chunk",
@@ -375,7 +649,7 @@ async def websocket_chat(websocket: WebSocket):
                 memory_engine.add_message(session_id, "assistant", full_reply)
 
                 # 4.1 บันทึกบทสนทนาลงใน Obsidian Vault (Chats/YYYY-MM-DD.md) แบบ Real-time ทันที
-                obsidian_sync.log_chat_exchange(session_id, user_message, full_reply)
+                obsidian_sync.log_chat_exchange(session_id, history_label, full_reply)
 
                 # 5. สิ้นสุดการสตรีม
                 await websocket.send_json({

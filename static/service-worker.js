@@ -3,7 +3,7 @@
  * แคชไฟล์พื้นฐานเพื่อการเปิดแอปที่รวดเร็วและรองรับออฟไลน์เชลล์
  */
 
-const CACHE_NAME = "friday-cache-v2.5";
+const CACHE_NAME = "friday-cache-v3.0";
 const ASSETS_TO_CACHE = [
   "/",
   "/static/manifest.json",
