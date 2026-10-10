@@ -32,24 +32,25 @@ def print_mobile_banner():
         print("🔒 ลิงก์ปลอดภัยสำหรับคุยด้วยเสียง/เปิดไมค์ (HTTPS):")
         print(f"👉 {https_url}\n")
     
+    apk_url = f"http://{ip}:8000/download/Friday-AI.apk"
+    print("📱 ดาวน์โหลดแอป Android แท้ (.apk) ติดตั้งลงมือถือโดยตรง:")
+    print(f"👉 {apk_url}")
+    print("   (หรือผ่าน GitHub: https://github.com/wavefarmer997-dotcom/friday-ai/releases/latest)\n")
+
     print("[📷 สแกน QR Code นี้ด้วยกล้องมือถือเพื่อเข้าใช้งานทันที]:\n")
     qr = qrcode.QRCode(box_size=1, border=1)
     qr.add_data(http_url)
     qr.print_ascii(invert=True)
 
     print("\n" + "=" * 64)
-    print("💡 วิธีทำให้ไมโครโฟน & การคุยด้วยเสียงใช้งานได้ 100% บนมือถือ:")
+    print("💡 วิธีใช้งานแอป Friday บนมือถือ Android:")
     print("----------------------------------------------------------------")
-    print("1. บน Google Chrome (Android):")
-    print(f"   - เปิดลิงก์: {http_url}")
-    print("   - เปิดแท็บใหม่พิมพ์: chrome://flags")
-    print("   - ค้นหา: Insecure origins treated as secure")
-    print(f"   - ใส่: {http_url} แล้วเลือก Enabled > กด Relaunch")
-    print("   - ไมค์และการคุยด้วยเสียงสดจะทำงานได้เต็มประสิทธิภาพทันที!")
-    print("\n2. หรือเปิดผ่าน HTTPS:")
-    print(f"   - เข้า {https_url} (กด Advanced > Proceed)")
-    print("\n3. ติดตั้งเป็นแอปเต็มหน้าจอ (PWA):")
-    print("   - แตะเมนู 3 จุด (⋮) ใน Chrome > 'เพิ่มลงในหน้าจอหลัก'")
+    print("✨ แนะนำที่สุด (แอป Android แท้):")
+    print(f"   - เปิดลิงก์: {apk_url} บนมือถือเพื่อดาวน์โหลด Friday-AI.apk")
+    print("   - แตะติดตั้งไฟล์ APK ลงเครื่อง จะได้แอป Friday AI ใช้งานเต็มจอ")
+    print("   - ไมโครโฟนและเสียงคุยสดใช้งานได้ 100% ทันทีโดยไม่ต้องเปิดเบราว์เซอร์!")
+    print("\n🌐 หากเข้าใช้งานผ่านเว็บเบราว์เซอร์มือถือ:")
+    print(f"   - เข้าผ่าน HTTP: {http_url}")
     print("=" * 64 + "\n")
 
 if __name__ == "__main__":

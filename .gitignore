@@ -16,6 +16,7 @@ data/
 
 # ----- SSL & Temp Files -----
 *.pem
+*.apk
 test_voice.mp3
 
 
